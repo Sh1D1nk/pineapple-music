@@ -1,7 +1,7 @@
 {
   "name": "pineapple-music",
   "productName": "Pineapple Music",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Pineapple Music - Apple Music 风格 + 液态玻璃的 Windows 桌面音乐播放器",
   "author": "Local Music",
   "license": "AGPL-3.0-only",
@@ -19,7 +19,10 @@
     "test": "vitest run",
     "fixtures": "node scripts/make-fixtures.mjs",
     "rebuild:native": "electron-builder install-app-deps",
-    "verify": "npm run compile && node scripts/verify.mjs"
+    "verify": "npm run compile && node scripts/verify.mjs",
+    "version:bump": "node scripts/bump-version.mjs",
+    "release": "node scripts/bump-version.mjs && npm run build",
+    "publish:github": "git push -u origin main && git push --tags"
   },
   "dependencies": {
     "@applemusic-like-lyrics/core": "0.6.0",
