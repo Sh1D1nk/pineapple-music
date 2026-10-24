@@ -5,6 +5,39 @@
   animation: pageIn 220ms var(--ease) both;
 }
 
+/* 专辑详情：裁剪封面作为背景，正文压在上面。
+   isolation 让 z-index:-1 的背景留在这个页面自己的层叠上下文里，
+   既不会掉到滚动容器背后，也不需要给每个子元素重设 z-index。 */
+.albumPage {
+  position: relative;
+  isolation: isolate;
+}
+
+.albumBg {
+  position: absolute;
+  inset: -40px -16px -40px;
+  background-size: cover;
+  background-position: center;
+  /* 模糊量固定 28px：够把封面化成色块，又不至于糊成一片纯色。
+     这里只做「氛围底」，真正的可读性靠下面那层渐变蒙回页面底色。 */
+  filter: blur(28px) saturate(1.35) brightness(0.9);
+  opacity: 0.7;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.albumBg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-content) 74%, transparent) 0%,
+    color-mix(in srgb, var(--bg-content) 82%, transparent) 46%,
+    var(--bg-content) 94%
+  );
+}
+
 @keyframes pageIn {
   from {
     opacity: 0;
@@ -149,19 +182,35 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(14px) saturate(1.6);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
-  opacity: 0;
-  transform: translateY(6px) scale(0.94);
-  transition: opacity 180ms var(--ease), transform 180ms var(--ease);
+  /* 深色玻璃态：纯白底 + 白色图标在深色主题里等于「按钮消失」，
+     浅色主题下又白得和封面糊在一起。压暗底色 + 1px 高光描边，两套主题都清晰。 */
+  color: #fff;
+  background: rgba(18, 18, 20, 0.52);
+  backdrop-filter: blur(14px) saturate(1.5);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.34);
+  /* 常驻可见：之前 opacity:0 等 hover 才亮，鼠标刚移入的那 180ms 里按钮是不存在的 */
+  opacity: 0.94;
+  transform: none;
+  transition: opacity 160ms var(--ease), background 160ms var(--ease), transform 160ms var(--ease);
+  z-index: 2;
 }
 
 .card:hover .cardPlay,
 .cardPlay:focus-visible {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  background: rgba(18, 18, 20, 0.72);
+}
+
+.cardPlay:hover {
+  background: rgba(18, 18, 20, 0.8);
+  transform: translateY(-1px);
+}
+
+.cardPlay:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .cardPlay:active {
@@ -172,22 +221,27 @@
   position: absolute;
   right: 10px;
   bottom: 10px;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(14px) saturate(1.6);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
-  opacity: 0;
-  transition: opacity 180ms var(--ease);
+  color: #fff;
+  background: rgba(18, 18, 20, 0.52);
+  backdrop-filter: blur(14px) saturate(1.5);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.34);
+  opacity: 0.88;
+  transition: opacity 160ms var(--ease), background 160ms var(--ease);
+  z-index: 2;
 }
 
-.card:hover .cardMore {
+.card:hover .cardMore,
+.cardMore:focus-visible {
   opacity: 1;
+  background: rgba(18, 18, 20, 0.72);
 }
 
 .cardTitle {
@@ -196,6 +250,42 @@
 }
 
 .cardSubtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* 收藏卡片右上角的星标：与播放按钮同一套深色玻璃，靠强调色区分「已收藏」 */
+.cardStar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  background: rgba(18, 18, 20, 0.52);
+  backdrop-filter: blur(14px) saturate(1.5);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.34);
+  transition: background 160ms var(--ease), transform 160ms var(--ease);
+  z-index: 2;
+}
+
+.cardStar:hover {
+  background: rgba(18, 18, 20, 0.78);
+  transform: translateY(-1px);
+}
+
+.cardStar:active {
+  transform: scale(0.92);
+}
+
+.favEmptyNote {
+  padding: 18px 4px 8px;
   font-size: 13px;
   color: var(--text-secondary);
 }
@@ -296,6 +386,7 @@
   color: #fff;
   opacity: 0;
   transition: opacity var(--dur-fast) var(--ease);
+  z-index: 2;
 }
 
 .row:hover .thumbPlay {
@@ -308,6 +399,18 @@
 
 .titleText {
   min-width: 0;
+}
+
+.songTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.favMark {
+  flex: 0 0 auto;
+  color: var(--accent);
 }
 
 .songTitle {

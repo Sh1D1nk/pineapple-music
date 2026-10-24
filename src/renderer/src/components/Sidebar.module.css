@@ -141,12 +141,44 @@
   position: absolute;
   top: 12px;
   bottom: 12px;
-  right: 2px;
-  width: 6px;
+  right: 0;
+  width: 8px;
   cursor: col-resize;
   border-radius: 3px;
+  display: flex;
+  justify-content: center;
 }
 
-.resizeHandle:hover {
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
+/* 常态就有一条可看见的细线，悬浮时加粗成强调色：之前几乎不可见，等于没有拖拽入口 */
+.resizeHandle::after {
+  content: '';
+  width: 1px;
+  height: 100%;
+  border-radius: 1px;
+  background: transparent;
+  transition: background var(--dur-fast) var(--ease), width var(--dur-fast) var(--ease);
+}
+
+.resizeHandle:hover::after {
+  width: 2px;
+  background: color-mix(in srgb, var(--accent) 62%, transparent);
+}
+
+/* 侧边栏右缘的分隔：细线 + 外侧柔光，制造「这是浮在内容上的面板」的层次。
+   用独立元素而不是 border，是因为 border 会跟着 22px 圆角弯过去，看起来像描边而不是分隔线。 */
+.divider {
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  right: 0;
+  width: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--sidebar-divider) 12%,
+    var(--sidebar-divider) 88%,
+    transparent
+  );
+  box-shadow: 0 0 18px 2px var(--sidebar-shadow-color);
 }

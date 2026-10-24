@@ -14,6 +14,7 @@ import { SongsView } from './views/SongsView'
 import { AlbumsView } from './views/AlbumsView'
 import { AlbumDetail } from './views/AlbumDetail'
 import { ArtistsView, ArtistDetail } from './views/ArtistsView'
+import { FavoritesView } from './views/FavoritesView'
 import { SearchView } from './views/SearchView'
 import { SettingsView } from './views/SettingsView'
 import { TransitionLab } from './views/TransitionLab'
@@ -168,6 +169,8 @@ function Pages(): JSX.Element {
       return <AlbumsView title="专辑" mode="albums" />
     case 'artists':
       return <ArtistsView />
+    case 'favorites':
+      return <FavoritesView />
     case 'album':
       return <AlbumDetail albumKey={view.key} />
     case 'artist':

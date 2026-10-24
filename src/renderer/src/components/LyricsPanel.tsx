@@ -37,6 +37,10 @@ export function LyricsPanel(): JSX.Element {
 
   const quality = settings.backgroundQuality
   const fps = quality === 'high' ? 60 : quality === 'medium' ? 30 : 24
+  // 封面只能用「被压暗的氛围底」的身份存在：亮度/饱和度走用户设置，再叠一层渐变压暗。
+  // 这两条与全屏页的 fsBg + fsTint 同一套数值，面板此前两者皆无，于是整块面板看着就是一张封面。
+  const bgFilter = `saturate(${settings.bgSaturate}) brightness(${settings.bgBrightness})`
+  const showFlowBg = settings.bgEnabled && settings.bgType === 'flow' && quality !== 'off'
 
   return (
     <div
@@ -49,18 +53,18 @@ export function LyricsPanel(): JSX.Element {
           className={styles.lyricsBg}
           style={{
             background: albumArt
-              ? 'linear-gradient(160deg,#2a2a2e,#131315)'
-              : 'linear-gradient(160deg,#3a3a40,#141416)'
+              ? 'linear-gradient(160deg,#1e1e22,#0e0e10)'
+              : 'linear-gradient(160deg,#26262a,#0d0d0f)'
           }}
         />
       )}
-      {mounted && song && albumArt && quality !== 'off' && (
-        <div className={styles.lyricsBg}>
+      {mounted && song && albumArt && showFlowBg && (
+        <div className={styles.lyricsBg} style={{ '--lyrics-bg-filter': bgFilter } as React.CSSProperties}>
           <BackgroundRender
             album={albumArt ?? undefined}
             playing={playback.playing}
             fps={fps}
-            flowSpeed={1.6}
+            flowSpeed={settings.bgFlowSpeed}
             hasLyric={lines.length > 0}
             renderScale={quality === 'high' ? 0.75 : 0.5}
             staticMode={quality === 'low'}
@@ -68,6 +72,18 @@ export function LyricsPanel(): JSX.Element {
           />
         </div>
       )}
+      {mounted && song && albumArt && settings.bgEnabled && settings.bgType === 'blur' && (
+        <div
+          className={`${styles.lyricsBg} ${styles.lyricsBgBlur}`}
+          style={{
+            backgroundImage: `url(${albumArt})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            filter: `blur(${Math.round(settings.bgBlur / 2)}px) ${bgFilter}`
+          }}
+        />
+      )}
+      {mounted && <div className={styles.lyricsTint} aria-hidden="true" />}
       {mounted && (
       <div className={styles.lyricsContent}>
         <div className={styles.lyricsHeader}>

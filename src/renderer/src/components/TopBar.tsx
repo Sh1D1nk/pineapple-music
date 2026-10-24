@@ -291,7 +291,7 @@ function NowPlayingPill(): JSX.Element {
 function PanelGroup(): JSX.Element {
   const lyricsOpen = useStore((s) => s.lyricsOpen)
   const queueOpen = useStore((s) => s.queueOpen)
-  const setFullscreen = useStore((s) => s.setFullscreen)
+  const setLyricsOpen = useStore((s) => s.setLyricsOpen)
   const setQueueOpen = useStore((s) => s.setQueueOpen)
 
   return (
@@ -299,8 +299,8 @@ function PanelGroup(): JSX.Element {
       <button
         type="button"
         className={`${styles.roundButton} ${lyricsOpen ? styles.active : ''}`}
-        onClick={() => setFullscreen(true)}
-        title="全屏歌词（Ctrl+L 打开侧边面板）"
+        onClick={() => setLyricsOpen(!useStore.getState().lyricsOpen)}
+        title="歌词面板 (Ctrl+L)"
         aria-pressed={lyricsOpen}
       >
         <Icon name="lyrics" size={20} />

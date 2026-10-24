@@ -55,6 +55,8 @@ export class AudioEngine {
   private master: GainNode | null = null
   private decks: Record<DeckId, Deck> | null = null
   private active: DeckId = 'A'
+  /** 刚被换下去、正在淡出的 deck：它的 'ended' 属于上一首，不能触发自动下一首。 */
+  private retiring: DeckId | null = null
   private currentSong: SongMeta | null = null
   private pendingSong: SongMeta | null = null
   private phase: EnginePhase = 'idle'
@@ -196,6 +198,7 @@ export class AudioEngine {
     if (ctx.state === 'suspended') void ctx.resume()
     this.cancelBridge(false)
     this.silenceOther(this.active)
+    this.retiring = null
     const deck = this.decks![this.active]
     this.currentSong = song
     this.endedFired = false
@@ -319,6 +322,8 @@ export class AudioEngine {
       window.clearTimeout(pauseTimers[nextId]!)
       pauseTimers[nextId] = null
     }
+    // 这个 deck 若正被上一次切歌标记为「退役」，本次复用等于复活它，标记作废
+    if (this.retiring === nextId) this.retiring = null
     const now = ctx.currentTime
 
     to.el.src = songUrl(song.id)
@@ -330,12 +335,12 @@ export class AudioEngine {
     from.gain.gain.setValueAtTime(from.gain.gain.value, now)
     from.gain.gain.linearRampToValueAtTime(0, now + fade)
 
-    try {
-      await to.el.play()
-    } catch (err) {
-      console.warn('[engine] crossfade play rejected', String(err))
-    }
+    // 关键：先把「当前 deck」翻到新的一块，再去等 play()。
+    // play() 是异步的，如果等它 resolve 之后才翻，旧 deck 在等待窗口里自然播完的
+    // 'ended' 会被 handleEnded 当成「新歌播完了」再切一首 —— 这就是连点「下一首」
+    // 偶尔一次跳两首的来源。翻完之后旧 deck 只是「退役」，它的 ended 一律忽略。
     this.active = nextId
+    this.retiring = from.id
     this.currentSong = song
     // 换到新 deck 是一次新的播放：必须重置 ended 标记与保护窗，
     // 否则第一首播完自动切到第二首后，第二首的 ended 会被 alreadyFired 拦截，
@@ -344,6 +349,20 @@ export class AudioEngine {
     this.endedGuardUntil = performance.now() + ENDED_GUARD_MS
     this.phase = 'playing'
     this.emit()
+
+    try {
+      await to.el.play()
+    } catch (err) {
+      console.warn('[engine] crossfade play rejected', String(err))
+      // 新 deck 起不来：把旧 deck 立刻停掉，别留一块静音但还在跑的 deck
+      from.el.pause()
+      if (this.retiring === from.id) this.retiring = null
+      if (this.active === to.id) {
+        this.phase = 'paused'
+        this.emit()
+      }
+      return
+    }
     pauseTimers[from.id] = window.setTimeout(() => {
       pauseTimers[from.id] = null
       // 只有当它真的不再是当前 deck 时才停，避免连点「下一首」把正在放的那块停掉
@@ -352,6 +371,7 @@ export class AudioEngine {
       from.el.removeAttribute('src')
       from.el.load()
       from.gain.gain.setValueAtTime(0, ctx.currentTime)
+      if (this.retiring === from.id) this.retiring = null
     }, fade * 1000 + 80)
   }
 
@@ -560,7 +580,9 @@ export class AudioEngine {
   }
 
   private handleEnded(id: DeckId): void {
-    if (id !== this.active) return
+    // 只有当前 deck 才有资格报告「播完了」。退役中的旧 deck 即使还在出声，
+    // 它播完也只是上一首的尾巴，绝不能把刚点开的新歌顶掉。
+    if (id !== this.active || id === this.retiring) return
     if (this.bridge && !this.bridge.finished) return
     const deck = this.decks?.[id]
     // 切歌竞态：上一首的 'ended' 事件可能排在 load() 之后才派发，

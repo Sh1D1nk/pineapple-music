@@ -1,9 +1,10 @@
 import { ipcMain, dialog, shell, BrowserWindow, app } from 'electron'
 import { join } from 'node:path'
-import { copyFileSync, existsSync, readdirSync, statSync } from 'node:fs'
+import { copyFileSync, existsSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import type {
   AnalysisProgress,
   AppSettings,
+  FavoritesState,
   LibraryBatch,
   LibraryFolder,
   LyricsPayload,
@@ -16,8 +17,10 @@ import type { LyricsService } from './lyrics/lyricsService'
 import type { AnalysisService } from './media/analysisService'
 import type { StemService } from './media/stemService'
 import { decodeClip, type PcmClip } from './media/ffmpeg'
+import { probeModel } from './media/stemRuntime'
 import type { SettingsService } from './settings'
-import { modelsDir, userDataDir } from './paths'
+import { favoritesFile, modelsDir, userDataDir } from './paths'
+import { readFavorites, toggleFavorite, writeFavorites } from './favorites'
 
 interface Deps {
   library: LibraryService
@@ -28,8 +31,11 @@ interface Deps {
   getWindow: () => BrowserWindow | null
 }
 
-/** 模型清单页：列出社区常用的 Demucs / MDX-Net ONNX 两轨模型，具体许可以模型页为准。 */
-const MODEL_HUB_URL = 'https://huggingface.co/models?search=demucs%20onnx'
+/**
+ * 下载入口：这不是「搜索页」，而是一个可直接下载 .onnx 的具体模型仓库页。
+ * 本应用不内置、不转分发任何模型；许可以模型页/仓库内的 LICENSE 为准。
+ */
+const MODEL_HUB_URL = 'https://huggingface.co/Tha456/uvr5-models'
 
 const segmentCache = new Map<string, PcmClip>()
 const SEGMENT_CACHE_LIMIT = 6
@@ -203,7 +209,7 @@ export function registerIpc(deps: Deps): void {
   })
 
   /* ---- 分轨模型：只负责「放哪、从哪下、怎么导入」，推理仍由 StemService 决定是否可用 ---- */
-  ipcMain.handle('models/status', () => {
+  ipcMain.handle('models/status', async () => {
     const dir = modelsDir()
     let files: { name: string; size: number }[] = []
     try {
@@ -213,7 +219,14 @@ export function registerIpc(deps: Deps): void {
     } catch {
       files = []
     }
-    return { dir, files, installed: files.length > 0, url: MODEL_HUB_URL }
+    // 逐个探测签名：能用的才算 installed，不能用的带原因回传，
+    // 界面才能解释「文件放进去了，为什么还是不能用」。
+    const rejected: { name: string; reason: string }[] = []
+    for (const file of files) {
+      const probe = await probeModel(join(dir, file.name))
+      if (!probe.ok) rejected.push({ name: file.name, reason: probe.reason ?? '签名不匹配' })
+    }
+    return { dir, files, rejected, installed: files.length - rejected.length > 0, url: MODEL_HUB_URL }
   })
 
   ipcMain.handle('models/openPage', () => {
@@ -233,9 +246,49 @@ export function registerIpc(deps: Deps): void {
     })
     if (result.canceled || result.filePaths.length === 0) return { ok: false, reason: 'canceled' }
     const source = result.filePaths[0]!
-    const target = join(modelsDir(), source.split(/[\/]/).pop()!)
+    const name = source.split(/[\/]/).pop()!
+    const target = join(modelsDir(), name)
     copyFileSync(source, target)
-    return { ok: true, name: target.split(/[\/]/).pop() }
+    // 导入即校验：签名不对的文件不该留在模型目录里冒充「已安装」
+    const probe = await probeModel(target)
+    if (!probe.ok) {
+      try {
+        unlinkSync(target)
+      } catch {
+        /* 删不掉就留着，状态里也会标出来 */
+      }
+      return {
+        ok: false,
+        name,
+        reason: probe.reason ?? '模型签名不匹配',
+        expected: '输入 [1, C, 2049, T]（C = 2 或 4）',
+        actual: probe.inputShape
+      }
+    }
+    return { ok: true, name: probe.name, sizeMb: probe.sizeMb }
+  })
+
+  ipcMain.handle('app/openExternal', (_e, url: string) => {
+    // 只放行 http(s) + 已知模型源，渲染进程不能拿它当任意协议启动器
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return false
+    const allowed = ['huggingface.co', 'github.com', 'objects.githubusercontent.com']
+    try {
+      const host = new URL(url).hostname
+      if (!allowed.some((entry) => host === entry || host.endsWith(`.${entry}`))) return false
+    } catch {
+      return false
+    }
+    void shell.openExternal(url)
+    return true
+  })
+
+  ipcMain.handle('favorites/get', () => readFavorites(favoritesFile()))
+
+  ipcMain.handle('favorites/toggle', (_e, kind: 'song' | 'album', id: string) => {
+    if (kind !== 'song' && kind !== 'album') return readFavorites(favoritesFile())
+    if (typeof id !== 'string' || id.length === 0) return readFavorites(favoritesFile())
+    const current = readFavorites(favoritesFile())
+    return writeFavorites(favoritesFile(), toggleFavorite(current, kind, id))
   })
 
   ipcMain.handle('app/showInFolder', (_e, path: string) => {

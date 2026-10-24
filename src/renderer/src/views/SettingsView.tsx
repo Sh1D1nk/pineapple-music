@@ -91,15 +91,36 @@ function Slider({
   )
 }
 
+/** 具体模型页：不是搜索页，点开就能看到文件与 LICENSE。许可以各仓库说明为准，应用不内置模型。 */
+const MODEL_SOURCES: { name: string; url: string; note: string }[] = [
+  {
+    name: 'UVR5 / Demucs ONNX 镜像（Hugging Face）',
+    url: 'https://huggingface.co/Tha456/uvr5-models',
+    note: 'UVR_MDXNET_3_9662.onnx 约 28 MB · UVR_MDXNET_Main.onnx 约 64 MB · MIT，随模型附 .LICENSE'
+  },
+  {
+    name: 'MDX-Net 模型目录（Hugging Face）',
+    url: 'https://huggingface.co/Politrees/UVR_resources/tree/main/MDXNet_models',
+    note: 'UVR-MDX-NET-Voc_FT.onnx 约 67 MB · 许可见仓库说明'
+  },
+  {
+    name: 'UVR 官方模型库（GitHub Releases）',
+    url: 'https://github.com/TRvlvr/model_repo/releases',
+    note: '上游发布页 · MIT · 本机直连 github.com 可能被挡，可用上面的镜像'
+  }
+]
+
 /** 分轨模型状态：显示装了什么、从哪下、怎么导入。 */
 function ModelSection(): JSX.Element {
   const [status, setStatus] = useState<{
     dir: string
     files: { name: string; size: number }[]
+    rejected: { name: string; reason: string }[]
     installed: boolean
     url: string
   } | null>(null)
   const [stems, setStems] = useState<Awaited<ReturnType<typeof bridge.stems.status>> | null>(null)
+  const [importError, setImportError] = useState<{ reason: string; expected?: string; actual?: string | null } | null>(null)
   const automix = useAutoMix((s) => s.status)
   const level = useAutoMix((s) => s.level)
   const message = useAutoMix((s) => s.message)
@@ -135,6 +156,75 @@ function ModelSection(): JSX.Element {
           {status?.installed ? '已安装' : '未安装'}
         </span>
       </Row>
+
+      <div className={styles.guide}>
+        <div className={styles.guideTitle}>这个模型是干什么的</div>
+        <div className={styles.guideRow}>
+          <span className={styles.guideLabel}>用途</span>
+          <span className={styles.guideValue}>
+            把歌曲拆成 <code>vocals</code>（人声）与 <code>instrumental</code>（伴奏）两轨，供 AutoMix 的 A / B 级过渡使用。
+            不装模型时 AutoMix 降级为 C 级（整曲节拍对齐 + 低频交换），播放本身不受影响。
+          </span>
+        </div>
+        <div className={styles.guideRow}>
+          <span className={styles.guideLabel}>格式</span>
+          <span className={styles.guideValue}>
+            ONNX，<b>频谱 mask 家族</b>（UVR / MDX-Net 系导出）。输入输出同形状 <code>[1, C, 2049, T]</code>，
+            C = 2（立体声实虚）或 4（+ 单声道），前两通道当 L / R mask；STFT 固定 n_fft=4096 / hop=1024。
+          </span>
+        </div>
+        <div className={styles.guideRow}>
+          <span className={styles.guideLabel}>不兼容</span>
+          <span className={styles.guideValue}>
+            不支持 4-stem（鼓 / 贝斯 / 和声分离）、不支持波形域模型（WaveGAN 一类）、不支持 GPU Execution Provider；
+            频点数不是 2049 的导出（例如 <code>[1, 4, 3072, 256]</code>）也会被拒绝。
+          </span>
+        </div>
+        <div className={styles.guideRow}>
+          <span className={styles.guideLabel}>存放位置</span>
+          <span className={styles.guideValue}>
+            <span className={styles.pathBox}>{status?.dir ?? '%APPDATA%\\Pineapple Music\\models\\'}</span>
+            <span className={styles.guideActions}>
+              <button type="button" className={styles.segment} onClick={() => void bridge.models.reveal()}>
+                打开模型目录
+              </button>
+            </span>
+          </span>
+        </div>
+        <div className={styles.guideRow}>
+          <span className={styles.guideLabel}>来源</span>
+          <span className={styles.guideValue}>
+            {MODEL_SOURCES.map((source) => (
+              <span key={source.url} className={styles.sourceRow}>
+                <button
+                  type="button"
+                  className={styles.linkButton}
+                  onClick={() => void bridge.openExternal(source.url)}
+                  title={source.url}
+                >
+                  {source.name}
+                </button>
+                <span className={styles.sourceNote}>{source.note}</span>
+              </span>
+            ))}
+            <span className={styles.sourceNote}>
+              应用不内置、不转分发任何模型；下载前请自行确认模型页上的许可与体积。
+            </span>
+          </span>
+        </div>
+        <div className={styles.guideRow}>
+          <span className={styles.guideLabel}>获取方式</span>
+          <span className={styles.guideValue}>
+            <ol className={styles.steps}>
+              <li>点上面的来源链接，下载一个 <code>.onnx</code> 文件</li>
+              <li>点「导入本地模型…」选中它（会自动复制进模型目录），或手动丢进「打开模型目录」</li>
+              <li>本区块状态变成「已安装」，并显示文件名与大小</li>
+              <li>必要时点「开始分轨（当前 + 下一首）」预热，之后 AutoMix 才会走 A / B 级</li>
+            </ol>
+          </span>
+        </div>
+      </div>
+
       <Row
         label="推理运行时"
         hint={
@@ -167,13 +257,39 @@ function ModelSection(): JSX.Element {
         label="当前过渡级别"
         hint={
           message ??
-          (level ? `按 ${level} 级规划` : '等待播放与队列中出现下一首')
+          (level
+            ? `按 ${level} 级规划`
+            : status?.installed
+              ? '等待播放与队列中出现下一首'
+              : '未安装分轨模型：现在固定走 C 级，装好后可升到 A / B 级')
         }
       >
         <span className={styles.statValue} style={{ fontSize: 15 }}>
           {automix === 'ready' || automix === 'entering' ? (level ?? '—') : automix === 'rendering' ? '渲染中' : '待命'}
         </span>
       </Row>
+      {status && status.rejected.length > 0 && (
+        <div className={styles.guide}>
+          <div className={styles.guideTitle}>签名不兼容的模型</div>
+          {status.rejected.map((entry) => (
+            <div key={entry.name} className={styles.rejectRow}>
+              <span className={styles.rejectName}>{entry.name}</span>
+              <span className={styles.rejectReason}>{entry.reason}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {importError && (
+        <div className={styles.guide}>
+          <div className={styles.guideTitle}>上次导入失败</div>
+          <div className={styles.rejectReason}>{importError.reason}</div>
+          {(importError.expected || importError.actual) && (
+            <div className={styles.rejectReason}>
+              期望 {importError.expected ?? '—'} · 实际 {importError.actual ?? '读不到输入形状'}
+            </div>
+          )}
+        </div>
+      )}
       <div className={styles.buttonRow}>
         <button type="button" className={styles.segment} style={{ height: 30 }} onClick={() => void bridge.models.openPage()}>
           下载模型…
@@ -185,8 +301,12 @@ function ModelSection(): JSX.Element {
           onClick={async () => {
             const result = await bridge.models.import()
             if (result.ok) {
+              setImportError(null)
               pushToast(`已导入 ${result.name ?? '模型'}`)
               refresh()
+            } else if (result.reason && result.reason !== 'canceled') {
+              setImportError({ reason: result.reason, expected: result.expected, actual: result.actual })
+              pushToast('模型签名不兼容，详见下方原因')
             }
           }}
         >
@@ -300,8 +420,18 @@ export function SettingsView(): JSX.Element {
           </div>
         ))}
         <div className={styles.buttonRow}>
-          <button type="button" className={styles.segmentActive} style={{ height: 30, borderRadius: 8 }} onClick={() => void bridge.pickFolder()}>
-            添加文件夹…
+          <button
+            type="button"
+            className={styles.segmentActive}
+            style={{ height: 30, borderRadius: 8 }}
+            onClick={async () => {
+              const added = await bridge.pickFolder()
+              if (added && added.length > 0) {
+                useStore.getState().pushToast(`已添加 ${added.length} 个文件夹`)
+              }
+            }}
+          >
+            添加音乐文件夹…
           </button>
           <button type="button" className={styles.segment} style={{ height: 30 }} onClick={() => void bridge.rescan()}>
             重新扫描
@@ -309,6 +439,9 @@ export function SettingsView(): JSX.Element {
           <button type="button" className={styles.segment} style={{ height: 30 }} onClick={() => void bridge.openUserData()}>
             打开缓存目录
           </button>
+        </div>
+        <div className={styles.note}>
+          添加后会立即开始扫描，已入库的歌曲可以边扫边播。移除文件夹只影响索引，不会删除磁盘上的文件。
         </div>
         <div className={styles.note}>
           索引使用 better-sqlite3；若原生模块不可用会自动回退到 JSON 索引，功能不受影响。扫描按修改时间与文件大小增量执行，已入库的歌曲立即可播放。

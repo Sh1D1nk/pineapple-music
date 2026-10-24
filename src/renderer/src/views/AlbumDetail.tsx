@@ -6,6 +6,7 @@ import { Icon } from '../components/Icon'
 import { TrackTable } from '../components/TrackTable'
 import { formatCount, formatDurationLabel } from '../lib/format'
 import { MORPH_COVER } from '../lib/transition'
+import { coverUrl } from '../bridge'
 import styles from '../components/views.module.css'
 
 interface Props {
@@ -41,7 +42,16 @@ export function AlbumDetail({ albumKey }: Props): JSX.Element {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${styles.albumPage}`}>
+      {/* 专辑封面艺术图：按 cover 裁切、压暗、底部渐隐成页面底色。
+          它只是背景，不拦截点击，也不参与 View Transition（形变只作用于 MORPH_COVER 那一个封面）。 */}
+      {album.coverId && (
+        <div
+          className={styles.albumBg}
+          style={{ backgroundImage: `url(${coverUrl(album.coverId, 640)})` }}
+          aria-hidden="true"
+        />
+      )}
       <div className={styles.albumHero}>
         <div className={styles.albumCover} style={{ viewTransitionName: MORPH_COVER }}>
           <Cover coverId={album.coverId} size={640} radius={10} alt={album.name} />

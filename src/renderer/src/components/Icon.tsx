@@ -35,6 +35,8 @@ export type IconName =
   | 'sortAsc'
   | 'sortDesc'
   | 'grip'
+  | 'star'
+  | 'starFilled'
 
 interface Props extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   name: IconName
@@ -256,6 +258,17 @@ const paths: Record<IconName, JSX.Element> = {
       <circle cx="9" cy="17" r="1.4" />
       <circle cx="15" cy="17" r="1.4" />
     </g>
+  ),
+  star: (
+    <g {...stroke}>
+      <path d="m12 3.8 2.55 5.5 5.95.8-4.35 4.25 1.07 5.95L12 17.4l-5.22 2.9 1.07-5.95L3.5 10.1l5.95-.8Z" />
+    </g>
+  ),
+  starFilled: (
+    <path
+      {...solid}
+      d="m12 3.8 2.55 5.5 5.95.8-4.35 4.25 1.07 5.95L12 17.4l-5.22 2.9 1.07-5.95L3.5 10.1l5.95-.8Z"
+    />
   )
 }
 

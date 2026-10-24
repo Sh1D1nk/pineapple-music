@@ -4,6 +4,7 @@ import type { SongMeta } from '@shared/types'
 import { Cover } from './Cover'
 import { Icon } from './Icon'
 import { formatTime } from '../lib/format'
+import { useStore } from '../state/store'
 import styles from './views.module.css'
 
 export type SortKey = 'title' | 'artist' | 'album' | 'duration' | 'year' | 'added' | 'track'
@@ -37,6 +38,9 @@ export function TrackTable({
 }: Props): JSX.Element {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
+  // 收藏标记直接读 store：TrackTable 被五个视图复用，加一层 prop 只会让每个调用点都要接线
+  const favoriteSongs = useStore((s) => s.favorites.songs)
+  const favoriteSet = useMemo(() => new Set(favoriteSongs), [favoriteSongs])
 
   const items = useMemo(() => {
     if (!showDiscHeaders) return songs.map((song) => ({ kind: 'song' as const, song }))
@@ -156,8 +160,13 @@ export function TrackTable({
                   )}
                 </div>
                 <div className={styles.titleText}>
-                  <div className={`${styles.songTitle} ${isCurrent ? styles.songTitleActive : ''} ellipsis`}>
-                    {song.title}
+                  <div className={styles.songTitleRow}>
+                    <span className={`${styles.songTitle} ${isCurrent ? styles.songTitleActive : ''} ellipsis`}>
+                      {song.title}
+                    </span>
+                    {favoriteSet.has(song.id) && (
+                      <Icon name="starFilled" size={11} className={styles.favMark} aria-label="已收藏" />
+                    )}
                   </div>
                   <div className={`${styles.songArtistInline} ellipsis`}>{song.artists.join('、')}</div>
                 </div>

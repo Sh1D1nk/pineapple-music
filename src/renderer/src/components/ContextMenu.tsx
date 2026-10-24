@@ -14,6 +14,9 @@ export function ContextMenu(): JSX.Element | null {
   const playSongs = useStore((s) => s.playSongs)
   const setInfoSongId = useStore((s) => s.setInfoSongId)
   const pushToast = useStore((s) => s.pushToast)
+  const favorites = useStore((s) => s.favorites)
+  const toggleFavoriteSong = useStore((s) => s.toggleFavoriteSong)
+  const toggleFavoriteAlbum = useStore((s) => s.toggleFavoriteAlbum)
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
 
@@ -64,6 +67,36 @@ export function ContextMenu(): JSX.Element | null {
       >
         播放
       </button>
+      <div className={styles.menuSeparator} />
+      <button
+        type="button"
+        className={styles.menuItem}
+        onClick={() => {
+          void toggleFavoriteSong(song.id)
+          setContextMenu(null)
+        }}
+      >
+        <span>{favorites.songs.includes(song.id) ? '取消收藏' : '收藏'}</span>
+        <span className={styles.menuShortcut}>
+          {favorites.songs.includes(song.id) ? '★' : '☆'}
+        </span>
+      </button>
+      {album && (
+        <button
+          type="button"
+          className={styles.menuItem}
+          onClick={() => {
+            void toggleFavoriteAlbum(album.key)
+            setContextMenu(null)
+          }}
+        >
+          <span>{favorites.albums.includes(album.key) ? '取消收藏专辑' : '收藏整张专辑'}</span>
+          <span className={styles.menuShortcut}>
+            {favorites.albums.includes(album.key) ? '★' : '☆'}
+          </span>
+        </button>
+      )}
+      <div className={styles.menuSeparator} />
       <button
         type="button"
         className={styles.menuItem}

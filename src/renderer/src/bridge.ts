@@ -2,6 +2,7 @@ import type {
   AnalysisProgress,
   AnalysisResult,
   AppSettings,
+  FavoritesState,
   LibraryFolder,
   LyricsPayload,
   ScanProgress,
@@ -74,13 +75,30 @@ export const bridge = {
   },
   models: {
     status: () =>
-      invoke<{ dir: string; files: { name: string; size: number }[]; installed: boolean; url: string }>(
-        'models/status'
-      ),
+      invoke<{
+        dir: string
+        files: { name: string; size: number }[]
+        rejected: { name: string; reason: string }[]
+        installed: boolean
+        url: string
+      }>('models/status'),
     openPage: () => invoke<void>('models/openPage'),
     reveal: () => invoke<void>('models/reveal'),
-    import: () => invoke<{ ok: boolean; name?: string; reason?: string }>('models/import')
+    import: () =>
+      invoke<{
+        ok: boolean
+        name?: string
+        sizeMb?: number
+        reason?: string
+        expected?: string
+        actual?: string | null
+      }>('models/import')
   },
+  favorites: {
+    get: () => invoke<FavoritesState>('favorites/get'),
+    toggle: (kind: 'song' | 'album', id: string) => invoke<FavoritesState>('favorites/toggle', kind, id)
+  },
+  openExternal: (url: string) => invoke<boolean>('app/openExternal', url),
   on: (channel: string, listener: (payload: never) => void) => window.lm.on(channel, listener)
 }
 

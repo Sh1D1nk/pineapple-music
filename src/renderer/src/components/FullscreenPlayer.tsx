@@ -198,6 +198,18 @@ export function FullscreenPlayer(): JSX.Element {
       <div className={styles.fsTint} />
       <div className={styles.fsVignette} />
 
+      {/* 全屏页右上角：切回右侧停靠的歌词面板（两者互斥，面板在更低的层里，必须先退出全屏） */}
+      <div className={styles.fsCorner}>
+        <button
+          type="button"
+          className={styles.fsCornerButton}
+          onClick={() => setLyricsOpen(true)}
+          title="歌词面板 (Ctrl+L)"
+        >
+          <Icon name="lyrics" size={18} />
+        </button>
+      </div>
+
       {mounted && (
         <div className={styles.fsStage}>
           <div className={styles.fsLeft}>

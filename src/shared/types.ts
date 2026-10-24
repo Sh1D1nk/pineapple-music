@@ -270,7 +270,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   modelsDir: null
 };
 
-export type RepeatMode = 'off' | 'all' | 'one';
+export type RepeatMode = 'off' | 'all' | 'one'
+
+/** 收藏：只存 id / key 集合，专辑与艺人的歌曲集合由渲染进程换算 */
+export interface FavoritesState {
+  songs: string[]
+  albums: string[]
+};
 
 export interface QueueItem {
   songId: string;

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   AnalysisProgress,
   AppSettings,
+  FavoritesState,
   LibraryBatch,
   LyricsPayload,
   QueueItem,
@@ -11,6 +12,7 @@ import type {
 } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/types'
 import { bridge } from '../bridge'
+import { nextQueueIndex, prevQueueIndex } from '../lib/queueNav'
 import { engine, type EngineSnapshot } from '../audio/engine'
 
 export type View =
@@ -18,6 +20,7 @@ export type View =
   | { kind: 'songs' }
   | { kind: 'albums' }
   | { kind: 'artists' }
+  | { kind: 'favorites' }
   | { kind: 'album'; key: string }
   | { kind: 'artist'; name: string }
   | { kind: 'search' }
@@ -63,6 +66,7 @@ interface StoreState {
   scan: ScanProgress
   analysis: AnalysisProgress
   settings: AppSettings
+  favorites: FavoritesState
   view: View
   /** 供鼠标侧键 / Esc 用的返回栈，只在主导航与详情页之间记录 */
   viewHistory: View[]
@@ -94,6 +98,8 @@ interface StoreState {
   setDragActive: (active: boolean) => void
   pushToast: (text: string) => void
   dismissToast: (id: number) => void
+  toggleFavoriteSong: (id: string) => Promise<void>
+  toggleFavoriteAlbum: (key: string) => Promise<void>
 
   playSongs: (ids: string[], startIndex: number) => void
   playSongNow: (id: string) => void
@@ -236,6 +242,7 @@ export const useStore = create<StoreState>((set, get) => {
     scan: emptyScan,
     analysis: emptyAnalysis,
     settings: DEFAULT_SETTINGS,
+    favorites: { songs: [], albums: [] },
     view: { kind: 'recent' },
     viewHistory: [],
     navDirection: 'none',
@@ -290,7 +297,11 @@ export const useStore = create<StoreState>((set, get) => {
           void get().loadLyrics(songId)
         }) as never)
 
-        const [snapshot, settings] = await Promise.all([bridge.snapshot(), bridge.settings()])
+        const [snapshot, settings, favorites] = await Promise.all([
+          bridge.snapshot(),
+          bridge.settings(),
+          bridge.favorites.get().catch(() => ({ songs: [], albums: [] }))
+        ])
         const map: Record<string, SongMeta> = {}
         for (const song of snapshot.songs) map[song.id] = song
         const ids = snapshot.songs
@@ -305,6 +316,7 @@ export const useStore = create<StoreState>((set, get) => {
           folders: snapshot.folders,
           scan: snapshot.progress,
           settings,
+          favorites,
           analysis
         })
 
@@ -358,9 +370,19 @@ export const useStore = create<StoreState>((set, get) => {
         current.kind === view.kind &&
         JSON.stringify(current) === JSON.stringify(view)
       if (same) return
-      // 主导航（最近添加/艺人/专辑/歌曲）的高低决定内容进出方向，做成「向上/向下滚过」的观感
+      // 主导航（最近添加/艺人/专辑/歌曲/收藏）的高低决定内容进出方向，做成「向上/向下滚过」的观感
       const order = (v: View): number =>
-        v.kind === 'recent' ? 0 : v.kind === 'artists' ? 1 : v.kind === 'albums' ? 2 : v.kind === 'songs' ? 3 : -1
+        v.kind === 'recent'
+          ? 0
+          : v.kind === 'artists'
+            ? 1
+            : v.kind === 'albums'
+              ? 2
+              : v.kind === 'songs'
+                ? 3
+                : v.kind === 'favorites'
+                  ? 4
+                  : -1
       const from = order(current)
       const to = order(view)
       const navDirection =
@@ -389,7 +411,10 @@ export const useStore = create<StoreState>((set, get) => {
       set(open ? { queueOpen: true, lyricsOpen: false } : { queueOpen: false })
     },
     setLyricsOpen(open) {
-      set(open ? { lyricsOpen: true, queueOpen: false } : { lyricsOpen: false })
+      // 侧边歌词面板与全屏歌词页是两种互斥形态：面板活在 floatLayer（z-index 5），
+      // 全屏页在 overlayLayer（z-index 40）之上，两者同时打开只会让面板被整页盖住。
+      // 开一个必关另一个，才不会出现「点了歌词按钮却什么都没发生」。
+      set(open ? { lyricsOpen: true, queueOpen: false, fullscreen: false } : { lyricsOpen: false })
     },
     setCoverFlowOpen(open) {
       set({ coverFlowOpen: open })
@@ -397,8 +422,8 @@ export const useStore = create<StoreState>((set, get) => {
 
     setFullscreen(open) {
       // 只做应用内全屏：切换系统全屏会把窗口状态搅乱（尤其在最大化时），
-      // 真正的系统全屏留给 F11。
-      set({ fullscreen: open })
+      // 真正的系统全屏留给 F11。全屏页与侧边面板互斥，理由见 setLyricsOpen。
+      set(open ? { fullscreen: true, lyricsOpen: false } : { fullscreen: false })
     },
     setInfoSongId(id) {
       set({ infoSongId: id })
@@ -416,6 +441,18 @@ export const useStore = create<StoreState>((set, get) => {
     },
     dismissToast(id) {
       set({ toasts: get().toasts.filter((t) => t.id !== id) })
+    },
+
+    async toggleFavoriteSong(id) {
+      // 先请求主进程写盘，再用它返回的结果刷新内存：收藏是唯一真相在磁盘上的状态，
+      // 不做乐观更新，避免写失败后界面「显示已收藏但重启就没了」。
+      const favorites = await bridge.favorites.toggle('song', id)
+      set({ favorites })
+    },
+
+    async toggleFavoriteAlbum(key) {
+      const favorites = await bridge.favorites.toggle('album', key)
+      set({ favorites })
     },
 
     playSongs(ids, startIndex) {
@@ -454,23 +491,19 @@ export const useStore = create<StoreState>((set, get) => {
       if (auto && currentSong) {
         state.playback.history.push(currentSong.id)
       }
-      let nextIndex = index + 1
-      if (nextIndex >= queue.length) {
-        if (repeat === 'all') {
-          nextIndex = 0
-          if (shuffle) {
-            const shuffled = shuffleArray(queue).map((item) => ({ ...item, key: newKey() }))
-            set({ playback: { ...state.playback, queue: shuffled, index: 0 } })
-            const song = state.songs[shuffled[0]!.songId]
-            if (song) {
-              void engine.load(song, { autoplay: true, position: 0 })
-              void state.loadLyrics(song.id)
-            }
-            return
-          }
-        } else {
-          return
+      const nextIndex = nextQueueIndex(index, queue.length, repeat)
+      if (nextIndex === null) return
+      // 回到队首且开着随机：重排整条队列，让这一轮也是随机的
+      if (nextIndex === 0 && index === queue.length - 1 && shuffle) {
+        const shuffled = shuffleArray(queue).map((item) => ({ ...item, key: newKey() }))
+        set({ playback: { ...state.playback, queue: shuffled, index: 0 } })
+        const song = state.songs[shuffled[0]!.songId]
+        if (song) {
+          void engine.load(song, { autoplay: true, position: 0 })
+          void state.loadLyrics(song.id)
         }
+        persist(get())
+        return
       }
       const item = queue[nextIndex]
       if (!item) return
@@ -491,7 +524,7 @@ export const useStore = create<StoreState>((set, get) => {
         state.seek(0)
         return
       }
-      const prevIndex = Math.max(0, index - 1)
+      const prevIndex = prevQueueIndex(index, queue.length)
       const item = queue[prevIndex]
       if (!item) return
       const song = state.songs[item.songId]

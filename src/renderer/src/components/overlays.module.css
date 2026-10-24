@@ -155,7 +155,27 @@
   inset: 0;
   border-radius: 22px;
   overflow: hidden;
-  opacity: 0.92;
+}
+
+/* AMLL 的流体背景画在自己的 canvas 上，给包裹层加 filter 是无效的（实测 computed 仍是 none）。
+   滤镜必须直接命中 canvas，和插件对 .sa-flow canvas 的做法一致。 */
+.lyricsBg canvas {
+  filter: var(--lyrics-bg-filter, saturate(1.9) brightness(0.55));
+}
+
+.lyricsBgBlur {
+  opacity: 0.9;
+}
+
+/* 背景与歌词之间的压暗层：白字叠在高饱和封面上会直接被冲淡，
+   非当前行（AMLL 默认透明度很低）更是等于消失。 */
+.lyricsTint {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 22px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.14) 40%, rgba(0, 0, 0, 0.4));
 }
 
 .lyricsContent {

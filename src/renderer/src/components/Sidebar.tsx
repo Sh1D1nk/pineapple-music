@@ -1,15 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { Icon, type IconName } from './Icon'
 import { useStore } from '../state/store'
-import { bridge } from '../bridge'
 import { ProgressWidget } from './ProgressWidget'
 import styles from './Sidebar.module.css'
 
-const NAV: { key: 'recent' | 'artists' | 'albums' | 'songs'; label: string; icon: IconName }[] = [
+const NAV: {
+  key: 'recent' | 'artists' | 'albums' | 'songs' | 'favorites'
+  label: string
+  icon: IconName
+}[] = [
   { key: 'recent', label: '最近添加', icon: 'clock' },
   { key: 'artists', label: '艺人', icon: 'mic' },
   { key: 'albums', label: '专辑', icon: 'disc' },
-  { key: 'songs', label: '歌曲', icon: 'music' }
+  { key: 'songs', label: '歌曲', icon: 'music' },
+  { key: 'favorites', label: '收藏', icon: 'star' }
 ]
 
 export function Sidebar(): JSX.Element {
@@ -83,11 +87,6 @@ export function Sidebar(): JSX.Element {
     window.addEventListener('pointerup', onUp)
   }
 
-  const pickFolder = async (): Promise<void> => {
-    const result = await bridge.pickFolder()
-    if (result && result.length > 0) useStore.getState().pushToast(`已添加 ${result.length} 个文件夹`)
-  }
-
   return (
     <aside className={`glass glassLite ${styles.sidebar}`} style={{ width: 'var(--sidebar-w)' }}>
       <div className={styles.searchWrap}>
@@ -142,10 +141,6 @@ export function Sidebar(): JSX.Element {
       <ProgressWidget count={Object.keys(songs).length} />
 
       <div className={styles.footer}>
-        <button type="button" className={styles.footerButton} onClick={() => void pickFolder()}>
-          <Icon name="folderPlus" size={18} />
-          <span>添加音乐文件夹…</span>
-        </button>
         <button
           type="button"
           data-nav="settings"
@@ -157,6 +152,7 @@ export function Sidebar(): JSX.Element {
         </button>
       </div>
 
+      <div className={styles.divider} aria-hidden="true" />
       <div className={styles.resizeHandle} onPointerDown={startResize} />
     </aside>
   )

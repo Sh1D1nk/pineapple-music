@@ -213,3 +213,128 @@
   line-height: 1.6;
   margin-top: 10px;
 }
+
+/* ------------------------------------------------- 分轨模型说明（常驻、不折叠） */
+
+.guide {
+  margin: 10px 0 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-elevated, transparent);
+  box-shadow: inset 0 0 0 1px var(--separator);
+}
+
+.guideTitle {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.guideRow {
+  display: grid;
+  grid-template-columns: 68px 1fr;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--separator);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.guideRow:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.guideLabel {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.guideValue {
+  color: var(--text-primary);
+  min-width: 0;
+  word-break: break-word;
+}
+
+.guideValue code {
+  font-family: Consolas, 'Fira Code', monospace;
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--hover);
+}
+
+.pathBox {
+  display: inline-block;
+  max-width: 100%;
+  font-family: Consolas, 'Fira Code', monospace;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--hover);
+  user-select: text;
+  word-break: break-all;
+}
+
+.guideActions {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.sourceRow {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 0;
+}
+
+.linkButton {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: left;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+.sourceNote {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.steps {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rejectRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  border-top: 1px solid var(--separator);
+}
+
+.rejectName {
+  font-family: Consolas, 'Fira Code', monospace;
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+.rejectReason {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  word-break: break-word;
+}
