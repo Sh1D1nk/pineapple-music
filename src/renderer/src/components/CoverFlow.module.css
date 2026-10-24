@@ -1,0 +1,158 @@
+/* iPod 风格 Cover Flow：透视轨道 + 侧向 Y 轴旋转 */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  background: rgba(8, 8, 10, 0.86);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: flowFade 0.22s ease both;
+}
+
+@keyframes flowFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.rail {
+  position: relative;
+  width: 100%;
+  height: 340px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1200px;
+  perspective-origin: 50% 45%;
+  touch-action: none;
+  cursor: grab;
+}
+
+.dragging {
+  cursor: grabbing;
+}
+
+.cover {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 230px;
+  height: 230px;
+  margin: -115px 0 0 -115px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 6px;
+  overflow: hidden;
+  transform-origin: 50% 50%;
+  /* 变换在 JS 里算好（translate/rotate/scale/opacity），这里只负责过渡 */
+  transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.3s ease;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+
+.dragging .cover {
+  transition: none;
+}
+
+.cover:hover {
+  filter: brightness(1.08);
+}
+
+.cover img,
+.cover > div {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 22px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.78));
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition: transform 0.25s ease;
+}
+
+.cover:hover .caption {
+  transform: scaleY(1);
+}
+
+.captionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.captionArtist {
+  font-size: 11px;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.close {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.18s ease;
+}
+
+.close:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.close:active {
+  transform: scale(0.92);
+}
+
+.hint {
+  position: absolute;
+  bottom: 22px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+}

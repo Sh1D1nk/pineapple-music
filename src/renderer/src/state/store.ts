@@ -71,6 +71,7 @@ interface StoreState {
   queueOpen: boolean
   lyricsOpen: boolean
   fullscreen: boolean
+  coverFlowOpen: boolean
   infoSongId: string | null
   settingsSection: string | null
   contextMenu: ContextMenuState | null
@@ -87,6 +88,7 @@ interface StoreState {
   setQueueOpen: (open: boolean) => void
   setLyricsOpen: (open: boolean) => void
   setFullscreen: (open: boolean) => void
+  setCoverFlowOpen: (open: boolean) => void
   setInfoSongId: (id: string | null) => void
   setContextMenu: (menu: ContextMenuState | null) => void
   setDragActive: (active: boolean) => void
@@ -241,6 +243,7 @@ export const useStore = create<StoreState>((set, get) => {
     queueOpen: false,
     lyricsOpen: false,
     fullscreen: false,
+    coverFlowOpen: false,
     infoSongId: null,
     settingsSection: null,
     contextMenu: null,
@@ -388,6 +391,10 @@ export const useStore = create<StoreState>((set, get) => {
     setLyricsOpen(open) {
       set(open ? { lyricsOpen: true, queueOpen: false } : { lyricsOpen: false })
     },
+    setCoverFlowOpen(open) {
+      set({ coverFlowOpen: open })
+    },
+
     setFullscreen(open) {
       // 只做应用内全屏：切换系统全屏会把窗口状态搅乱（尤其在最大化时），
       // 真正的系统全屏留给 F11。

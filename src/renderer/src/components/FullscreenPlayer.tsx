@@ -31,12 +31,17 @@ export function FullscreenPlayer(): JSX.Element {
   const toggleShuffle = useStore((s) => s.toggleShuffle)
   const cycleRepeat = useStore((s) => s.cycleRepeat)
   const setInfoSongId = useStore((s) => s.setInfoSongId)
+  const setCoverFlowOpen = useStore((s) => s.setCoverFlowOpen)
   const setLyricsOpen = useStore((s) => s.setLyricsOpen)
   const setQueueOpen = useStore((s) => s.setQueueOpen)
   const shuffle = useStore((s) => s.playback.shuffle)
   const repeat = useStore((s) => s.playback.repeat)
 
   const [mounted, setMounted] = useState(open)
+  /** 上一首/下一首/播放的按压动画（对齐插件的 saPushL/R/C） */
+  const [push, setPush] = useState<'l' | 'r' | 'c' | null>(null)
+  const [fpsValue, setFps] = useState(0)
+  const closeRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (open) {
       setMounted(true)
@@ -59,13 +64,81 @@ export function FullscreenPlayer(): JSX.Element {
   const position = playback.position
   const duration = playback.duration || song?.durationSec || 0
   const percent = duration > 0 ? Math.min(100, (position / duration) * 100) : 0
-  const quality = settings.backgroundQuality
-  const fps = quality === 'high' ? 60 : 30
   // 与插件 applyFontScale() 同一条公式：max(max(5vh, 2.5vw), 12px) × 倍数
   const lyricFontSize = Math.round(
     Math.max(Math.max(window.innerHeight * 0.05, window.innerWidth * 0.025), 12) *
       settings.lyricFontScale
   )
+
+  // Q 弹缩放：按下时重放一次关键帧
+  const pulse = (dir: 'l' | 'r' | 'c'): void => {
+    if (!settings.btnAnim) return
+    setPush(null)
+    window.requestAnimationFrame(() => setPush(dir))
+    window.setTimeout(() => setPush(null), 460)
+  }
+
+  // 关闭条跟随鼠标：位移超过阈值就松手回弹（插件的 FOLLOW / LIMIT）
+  const bindClose = (el: HTMLButtonElement | null): void => {
+    if (!el) return
+    const FOLLOW = 0.24
+    const LIMIT = 52
+    let origin: { x: number; y: number } | null = null
+    let expanded = false
+    let released = false
+    const collapse = (): void => {
+      expanded = false
+      el.removeAttribute('data-expanded')
+      el.style.transform = ''
+    }
+    const onMove = (event: PointerEvent): void => {
+      if (!expanded || !origin) return
+      const dx = event.clientX - origin.x
+      const dy = event.clientY - origin.y
+      if (Math.hypot(dx, dy) > LIMIT) {
+        released = true
+        collapse()
+        return
+      }
+      el.style.transform = `translate(${(dx * FOLLOW).toFixed(1)}px,${(dy * FOLLOW).toFixed(1)}px)`
+    }
+    el.addEventListener('pointerenter', (event) => {
+      if (released) return
+      const rect = el.getBoundingClientRect()
+      origin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+      expanded = true
+      el.setAttribute('data-expanded', '1')
+      onMove(event)
+    })
+    el.addEventListener('pointermove', onMove)
+    el.addEventListener('pointerleave', () => {
+      released = false
+      origin = null
+      collapse()
+    })
+  }
+
+  // 实时帧率（插件右上角的 FPS 指示）
+  useEffect(() => {
+    if (!settings.showFps) return undefined
+    let raf = 0
+    let last = performance.now()
+    let frames = 0
+    let acc = 0
+    const loop = (now: number): void => {
+      acc += now - last
+      last = now
+      frames += 1
+      if (acc >= 500) {
+        setFps(Math.round((frames * 1000) / acc))
+        acc = 0
+        frames = 0
+      }
+      raf = window.requestAnimationFrame(loop)
+    }
+    raf = window.requestAnimationFrame(loop)
+    return () => window.cancelAnimationFrame(raf)
+  }, [settings.showFps])
 
   const seekFrom = (clientX: number): void => {
     const el = trackRef.current
@@ -79,19 +152,32 @@ export function FullscreenPlayer(): JSX.Element {
       className={`${styles.fullscreen} ${open ? styles.fullscreenOpen : ''} ${hasLyrics ? '' : styles.fsNoLyric}`}
       aria-hidden={!open}
     >
-      {mounted && song && albumArt && quality !== 'off' ? (
-        <div className={styles.fsBg}>
+      {mounted && song && albumArt && settings.bgEnabled && settings.bgType === 'flow' ? (
+        <div
+          className={styles.fsBg}
+          style={{ filter: `saturate(${settings.bgSaturate}) brightness(${settings.bgBrightness})` }}
+        >
           <BackgroundRender
             album={albumArt}
             playing={playback.playing}
-            fps={fps}
-            flowSpeed={2}
+            fps={settings.bgPerf ? 15 : settings.bgFps}
+            flowSpeed={settings.bgFlowSpeed}
             hasLyric={hasLyrics}
-            renderScale={quality === 'high' ? 0.8 : 0.5}
-            staticMode={quality === 'low'}
+            renderScale={settings.bgRenderScale}
+            staticMode={settings.bgPerf || settings.bgFps === 0}
             style={{ width: '100%', height: '100%' }}
           />
         </div>
+      ) : mounted && song && albumArt && settings.bgEnabled && settings.bgType === 'blur' ? (
+        <div
+          className={styles.fsBg}
+          style={{
+            backgroundImage: `url(${albumArt})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            filter: `blur(${settings.bgBlur}px) saturate(${settings.bgSaturate}) brightness(${settings.bgBrightness})`
+          }}
+        />
       ) : (
         <div className={styles.fsBg} style={{ background: 'linear-gradient(150deg,#3a3a3f,#111113)' }} />
       )}
@@ -104,6 +190,10 @@ export function FullscreenPlayer(): JSX.Element {
             <button
               type="button"
               className={styles.fsClose}
+              ref={(el) => {
+                closeRef.current = el
+                bindClose(el)
+              }}
               onClick={() => setFullscreen(false)}
               title="关闭 (Esc)"
             >
@@ -115,8 +205,12 @@ export function FullscreenPlayer(): JSX.Element {
             </button>
 
             <div
-              className={`${styles.fsCover} ${playback.playing ? styles.fsCoverPlaying : ''}`}
+              key={song?.id ?? 'none'}
+              className={`${styles.fsCover} ${playback.playing ? styles.fsCoverPlaying : ''} ${
+                settings.mediaAnim ? styles.fsCoverEnter : ''
+              }`}
               onClick={togglePlay}
+              style={settings.coverHideCursor ? { cursor: 'none' } : undefined}
             >
               <Cover coverId={song?.coverId ?? null} size={640} radius={0} alt={song?.title ?? ''} />
             </div>
@@ -126,7 +220,9 @@ export function FullscreenPlayer(): JSX.Element {
                 <div className={styles.fsMetaText}>
                   <div className={`${styles.fsName} ellipsis`}>{song?.title ?? '未在播放'}</div>
                   <div className={`${styles.fsArtistLine} ellipsis`}>{song?.artists.join('、') ?? ''}</div>
-                  <div className={`${styles.fsAlbumLine} ellipsis`}>{song?.album ?? ''}</div>
+                  {settings.showAlbum && (
+                    <div className={`${styles.fsAlbumLine} ellipsis`}>{song?.album ?? ''}</div>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -173,13 +269,37 @@ export function FullscreenPlayer(): JSX.Element {
                 >
                   <Icon name="shuffle" size={20} />
                 </button>
-                <button type="button" className={styles.fsPrev} onClick={prev} title="上一首">
+                <button
+                  type="button"
+                  className={`${styles.fsPrev} ${push === 'l' ? styles.fsPushL : ''}`}
+                  onClick={() => {
+                    pulse('l')
+                    prev()
+                  }}
+                  title="上一首"
+                >
                   <Icon name="prev" size={26} />
                 </button>
-                <button type="button" className={styles.fsPlay} onClick={togglePlay} title="播放 / 暂停">
+                <button
+                  type="button"
+                  className={`${styles.fsPlay} ${push === 'c' ? styles.fsPushC : ''}`}
+                  onClick={() => {
+                    pulse('c')
+                    togglePlay()
+                  }}
+                  title="播放 / 暂停"
+                >
                   <Icon name={playback.playing ? 'pause' : 'play'} size={34} />
                 </button>
-                <button type="button" className={styles.fsNext} onClick={() => next()} title="下一首">
+                <button
+                  type="button"
+                  className={`${styles.fsNext} ${push === 'r' ? styles.fsPushR : ''}`}
+                  onClick={() => {
+                    pulse('r')
+                    next()
+                  }}
+                  title="下一首"
+                >
                   <Icon name="next" size={26} />
                 </button>
                 <button
@@ -228,6 +348,16 @@ export function FullscreenPlayer(): JSX.Element {
               fontSize={lyricFontSize}
               weight={settings.lyricWeight}
               highlight={settings.lyricHighlight}
+              blur={settings.lyricBlur}
+              scale={settings.lyricScale}
+              wordFade={settings.wordFade}
+              hidePassed={settings.hidePassed}
+              clickSeek={settings.lyricClickSeek}
+              fontFamily={
+                settings.lyricFont === 'pingfang'
+                  ? '"PingFang SC","Microsoft YaHei",system-ui,sans-serif'
+                  : 'system-ui,"Segoe UI",sans-serif'
+              }
               alignAnchor="center"
               alignPosition={0.5}
               onSeek={(seconds) => seek(seconds)}

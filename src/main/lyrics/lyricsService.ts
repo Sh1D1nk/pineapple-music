@@ -224,7 +224,7 @@ export class LyricsService {
 
   async get(
     song: SongMeta,
-    priority: ('sidecar' | 'embedded')[]
+    priority: ('sidecar' | 'embedded' | 'text')[]
   ): Promise<LyricsPayload> {
     const sidecar = priority[0] === 'sidecar' ? this.findSidecar(song) : null
     const sidecarStat = sidecar ? await fs.stat(sidecar.path).catch(() => null) : null
@@ -237,7 +237,7 @@ export class LyricsService {
     return payload
   }
 
-  private async load(song: SongMeta, priority: ('sidecar' | 'embedded')[]): Promise<LyricsPayload> {
+  private async load(song: SongMeta, priority: ('sidecar' | 'embedded' | 'text')[]): Promise<LyricsPayload> {
     const empty: LyricsPayload = {
       songId: song.id,
       kind: 'none',

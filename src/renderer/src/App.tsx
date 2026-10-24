@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
 import { QueuePanel } from './components/QueuePanel'
 import { LyricsPanel } from './components/LyricsPanel'
+import { CoverFlow } from './components/CoverFlow'
 import { FullscreenPlayer } from './components/FullscreenPlayer'
 import { SongInfoDialog } from './components/SongInfoDialog'
 import { ContextMenu } from './components/ContextMenu'
@@ -51,7 +52,8 @@ function useShortcuts(): void {
       const state = useStore.getState()
 
       if (event.key === 'Escape') {
-        if (state.infoSongId) state.setInfoSongId(null)
+        if (state.coverFlowOpen) state.setCoverFlowOpen(false)
+        else if (state.infoSongId) state.setInfoSongId(null)
         else if (state.contextMenu) state.setContextMenu(null)
         else if (state.fullscreen) state.setFullscreen(false)
         else if (state.queueOpen) state.setQueueOpen(false)
@@ -79,6 +81,9 @@ function useShortcuts(): void {
       } else if (event.ctrlKey && event.key === 'ArrowDown') {
         event.preventDefault()
         state.setVolume(Math.max(0, state.playback.volume - 0.05))
+      } else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'f') {
+        event.preventDefault()
+        state.setCoverFlowOpen(!state.coverFlowOpen)
       } else if (event.ctrlKey && event.key.toLowerCase() === 'l') {
         event.preventDefault()
         state.setLyricsOpen(!state.lyricsOpen)
@@ -207,6 +212,8 @@ export function App(): JSX.Element {
   const settings = useStore((s) => s.settings)
   const view = useStore((s) => s.view)
   const navDirection = useStore((s) => s.navDirection)
+  const coverFlowOpen = useStore((s) => s.coverFlowOpen)
+  const setCoverFlowOpen = useStore((s) => s.setCoverFlowOpen)
   const viewKey = JSON.stringify(view)
   const ready = useStore((s) => s.ready)
   const init = useStore((s) => s.init)
@@ -257,6 +264,10 @@ export function App(): JSX.Element {
           <TopBar />
           <QueuePanel />
           <LyricsPanel />
+          <CoverFlow
+            open={coverFlowOpen}
+            onClose={() => setCoverFlowOpen(false)}
+          />
         </div>
 
         <div className="overlayLayer">

@@ -197,6 +197,8 @@ export class AudioEngine {
     this.silenceOther(this.active)
     const deck = this.decks![this.active]
     this.currentSong = song
+    this.endedFired = false
+    this.endedGuardUntil = performance.now() + 900
     this.phase = 'loading'
     this.loadedPosition = opts.position ?? 0
     deck.el.src = songUrl(song.id)
@@ -219,6 +221,7 @@ export class AudioEngine {
         }
       }
       this.phase = deck.el.paused ? 'paused' : 'playing'
+      this.endedFired = false
     } else {
       this.phase = 'paused'
     }
@@ -550,6 +553,13 @@ export class AudioEngine {
   private handleEnded(id: DeckId): void {
     if (id !== this.active) return
     if (this.bridge && !this.bridge.finished) return
+    // 切歌竞态：上一首的 'ended' 事件可能排在 load() 之后才派发，
+    // 那时 phase 已经是 playing，会把刚点开的歌误判成播完并跳到下一首。
+    if (performance.now() < this.endedGuardUntil) return
+    const deck = this.decks?.[id]
+    if (deck && !deck.el.ended) return
+    if (this.endedFired) return
+    this.endedFired = true
     if (this.phase === 'playing') {
       this.phase = 'paused'
       this.emit()
@@ -559,6 +569,10 @@ export class AudioEngine {
   }
 
   private onEndedCallback: (() => void) | null = null
+  /** load() 之后的一小段时间内忽略 'ended'，避免上一首的结束事件把新歌顶掉 */
+  private endedGuardUntil = 0
+  /** 同一首歌的 ended 只处理一次，防止连续跳过多首 */
+  private endedFired = false
 
   setEndedHandler(cb: (() => void) | null): void {
     this.onEndedCallback = cb

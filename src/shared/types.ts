@@ -150,7 +150,7 @@ export interface AppSettings {
   theme: 'system' | 'light' | 'dark';
   glass: 'full' | 'lite' | 'off';
   sidebarWidth: number;
-  lyricsPriority: ('sidecar' | 'embedded')[];
+  lyricsPriority: ('sidecar' | 'embedded' | 'text')[];
   lyricOffsetMs: number;
   showTranslation: boolean;
   showRoman: boolean;
@@ -159,6 +159,47 @@ export interface AppSettings {
   lyricWeight: number;
   /** 已唱字的高光亮度（0.3–1.4），越大越亮 */
   lyricHighlight: number;
+  /** 歌词字体：苹方优先 / 跟随系统 */
+  lyricFont: 'pingfang' | 'system';
+  /** 逐字渐变宽度（AMLL wordFadeWidth） */
+  wordFade: number;
+  /** 非当前行模糊 */
+  lyricBlur: boolean;
+  /** 非当前行缩放 */
+  lyricScale: boolean;
+  /** 隐藏已播放的歌词行 */
+  hidePassed: boolean;
+  /** 歌词页右上角显示实时帧率 */
+  showFps: boolean;
+  /** 歌词界面进入/退出的下拉动画 */
+  lyricTransition: boolean;
+  /** 上一首/下一首按钮的按压动画 */
+  btnAnim: boolean;
+  /** 切歌时封面与背景交叉淡入 */
+  mediaAnim: boolean;
+  /** 点击歌词行跳转到对应位置 */
+  lyricClickSeek: boolean;
+  /** 当前源取不到时自动回退到下一个源 */
+  lyricAutoFallback: boolean;
+  /** 歌词页背景 */
+  bgEnabled: boolean;
+  bgType: 'flow' | 'blur' | 'solid';
+  bgFlowSpeed: number;
+  bgRenderScale: number;
+  bgFps: number;
+  bgPerf: boolean;
+  adaptiveQuality: boolean;
+  bgBlur: number;
+  bgBrightness: number;
+  bgSaturate: number;
+  /** 歌曲信息 */
+  showAlbum: boolean;
+  coverHideCursor: boolean;
+  /** 顶栏胶囊材质（对应插件的底边栏） */
+  barStyle: 'off' | 'blur';
+  barOpacity: number;
+  barBlur: number;
+  barCover: number;
   backgroundQuality: 'high' | 'medium' | 'low' | 'off';
   automix: {
     enabled: boolean;
@@ -186,6 +227,33 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricFontScale: 1,
   lyricWeight: 600,
   lyricHighlight: 1,
+  lyricFont: 'pingfang',
+  wordFade: 0.6,
+  lyricBlur: true,
+  lyricScale: true,
+  hidePassed: false,
+  showFps: false,
+  lyricTransition: true,
+  btnAnim: true,
+  mediaAnim: true,
+  lyricClickSeek: true,
+  lyricAutoFallback: true,
+  bgEnabled: true,
+  bgType: 'flow',
+  bgFlowSpeed: 1,
+  bgRenderScale: 0.5,
+  bgFps: 30,
+  bgPerf: false,
+  adaptiveQuality: true,
+  bgBlur: 100,
+  bgBrightness: 0.55,
+  bgSaturate: 1.9,
+  showAlbum: true,
+  coverHideCursor: true,
+  barStyle: 'blur',
+  barOpacity: 0.42,
+  barBlur: 26,
+  barCover: 0.45,
   backgroundQuality: 'high',
   automix: {
     enabled: true,

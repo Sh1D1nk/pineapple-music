@@ -303,3 +303,27 @@ tests/                    vitest
 **不做**：4-stem（鼓/贝斯）、GPU EP、实时分轨。
 
 **实测**（合成常量 mask 模型 `fixtures/test-mask-035.onnx`，仅用于验证管线）：24 秒歌曲 **4 秒**跑完（≈6× 实时），`vocalCurve` 480 点、`phrases` 1 段、状态 `ready`；单测验证重建误差 < 1e-3、mask 0.35 时人声/伴奏能量比 0.4–0.7。
+
+---
+
+## 12. 对标 AMLL 插件（soda-amll-lyrics）的像素级改造
+
+参考实现：`soda-amll-lyrics/src/inject.js`（`OVERLAY_CSS` / `settingsSchema()` / `bindClose()` / `pulseTransport()`）。
+
+| # | 需求 | 实现 | 文件 |
+| --- | --- | --- | --- |
+| 1 | 设置项对标 | 设置页拆成插件同款分组：歌词 / 歌词播放器 / 歌词源 / 背景 / 歌曲信息 / 顶栏材质（对应插件的底边栏组）。新增 28 个设置项：歌词字体、字号、粗细（细/常规/中黑/半粗/粗）、高光亮度、逐字渐变宽度、歌词模糊/缩放、隐藏已播放歌词、显示帧率、界面过渡动画、切歌按钮动画、封面与背景过渡、点击歌词跳转、歌词源优先级与自动回退、背景开关/类型/速度/精度/帧率/模糊/亮度/饱和度/性能模式、显示专辑名、封面悬停隐藏鼠标、顶栏样式/不透明度/模糊/封面映射 | `shared/types.ts`、`views/SettingsView.tsx`、`components/LyricsView.tsx`、`components/FullscreenPlayer.tsx`、`components/TopBar.tsx` |
+| 2 | 底边栏对标 | 播放控制区按插件 `sa-progress` / `sa-times` / `sa-cbtn` 的尺寸与曲线重做；上一首/下一首/播放加上插件同款 Q 弹关键帧（`translateX(±16%) scale(.84)` / `scale(.86)`，.44s `cubic-bezier(.34,1.32,.5,1)`），可用「切歌按钮动画」开关 | `components/FullscreenPlayer.tsx`、`components/overlays.module.css` |
+| 3 | 封面与指示器 | 封面未就绪时用占位图垫底、成功后淡入，**暂停不再切占位图**；关闭小横杠恢复插件的「横杠 → 圆角方块 + X」以及跟随鼠标的弹簧手感（FOLLOW 0.24 / LIMIT 52，超阈值松手回弹） | `components/Cover.tsx`、`components/Cover.module.css`、`components/FullscreenPlayer.tsx` |
+| 4 | 切歌竞态 | 上一首的 `ended` 事件可能排在 `load()` 之后才派发，那时 phase 已是 playing，会把刚点开的歌误判成播完并跳到下一首。加了切歌保护窗（900ms）、`el.ended` 二次校验与单次触发标记 | `audio/engine.ts` |
+| 5 | iPod 风格 Cover Flow | 新增封面流：透视轨道 + 侧向 Y 轴旋转，中间封面正脸、两侧转成侧脸并后退；支持指针拖拽（带速度滑行与吸附）与滚轮逐格切换；打开时定位到当前播放专辑；点中间封面直接播放该专辑 | `components/CoverFlow.tsx`、`components/CoverFlow.module.css`、`App.tsx`（`Ctrl+Shift+F` 打开，全屏页右上角也有入口） |
+
+### 验证方式
+
+- `npm test`（49 个单测，含节拍/分轨/规划器）
+- `npm run verify` —— Playwright 驱动真实应用：导入 10 个夹具 → 逐项点按并截图
+- 针对性探针（`scripts/probe-flow.mjs`）实测：
+  - 点第 3 行 → 正在播放 **就是第 3 首**（`Midnight Drive` → `Midnight Drive`），不再跳到下一首；
+  - `Ctrl+Shift+F` 打开封面流：8 张封面渲染，滚轮后 `transform: translate3d(-210px,0,-120px) rotateY(58deg)`；
+  - 设置页分组读出 `外观 / 资料库 / 歌词 / 歌词播放器 / 歌词源 / 背景 / 歌曲信息 / 顶栏材质 / 播放·AutoMix`。
+- 截图：`screenshots/29-cover-flow.png`、`30-cover-flow-moved.png`、`31-settings-groups.png`

@@ -23,6 +23,7 @@ export type IconName =
   | 'queue'
   | 'more'
   | 'expand'
+  | 'album'
   | 'close'
   | 'trash'
   | 'check'
@@ -184,6 +185,12 @@ const paths: Record<IconName, JSX.Element> = {
       <path d="M12 1.9v6.2" />
       <rect x="3.8" y="10.2" width="16.4" height="10" rx="2.2" />
     </g>
+  ),
+  album: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="2.2" />
+    </>
   ),
   close: (
     <g {...stroke}>

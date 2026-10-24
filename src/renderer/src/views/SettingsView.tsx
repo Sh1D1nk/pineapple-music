@@ -329,6 +329,19 @@ export function SettingsView(): JSX.Element {
             }
           />
         </Row>
+        <Row label="歌词字体" hint="优先使用本机苹方字体">
+          <Segmented
+            value={settings.lyricFont}
+            options={[
+              { value: 'pingfang', label: '苹方' },
+              { value: 'system', label: '跟随系统' }
+            ]}
+            onChange={(value) => void update({ lyricFont: value })}
+          />
+        </Row>
+        <Row label="点击歌词跳转" hint="点击歌词行跳到对应播放位置">
+          <Switch value={settings.lyricClickSeek} onChange={(value) => void update({ lyricClickSeek: value })} />
+        </Row>
         <Row label="显示翻译">
           <Switch value={settings.showTranslation} onChange={(value) => void update({ showTranslation: value })} />
         </Row>
@@ -345,13 +358,17 @@ export function SettingsView(): JSX.Element {
             onChange={(value) => void update({ lyricFontScale: value / 100 })}
           />
         </Row>
-        <Row label="歌词粗细" hint="Apple Music 默认 600，越轻越纤细">
-          <Slider
-            value={settings.lyricWeight}
-            min={200}
-            max={900}
-            step={50}
-            onChange={(value) => void update({ lyricWeight: value })}
+        <Row label="歌词粗细" hint="歌词文字的笔画粗细，默认半粗 600">
+          <Segmented
+            value={String(settings.lyricWeight)}
+            options={[
+              { value: '300', label: '细' },
+              { value: '400', label: '常规' },
+              { value: '500', label: '中黑' },
+              { value: '600', label: '半粗' },
+              { value: '700', label: '粗' }
+            ]}
+            onChange={(value) => void update({ lyricWeight: Number(value) })}
           />
         </Row>
         <Row label="歌词高光" hint="当前句已唱部分的亮度，越大越亮">
@@ -383,6 +400,191 @@ export function SettingsView(): JSX.Element {
               { value: 'off', label: '关闭' }
             ]}
             onChange={(value) => void update({ backgroundQuality: value })}
+          />
+        </Row>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionTitle}>歌词播放器</div>
+        <Row label="歌词界面过渡动画" hint="进入 / 退出时的下拉与淡入缓动">
+          <Switch value={settings.lyricTransition} onChange={(value) => void update({ lyricTransition: value })} />
+        </Row>
+        <Row label="切歌按钮动画" hint="上一首 / 下一首按钮的 Q 弹按压动画">
+          <Switch value={settings.btnAnim} onChange={(value) => void update({ btnAnim: value })} />
+        </Row>
+        <Row label="封面与背景过渡" hint="切歌时封面与背景交叉淡入">
+          <Switch value={settings.mediaAnim} onChange={(value) => void update({ mediaAnim: value })} />
+        </Row>
+        <Row label="歌词模糊效果" hint="非当前行模糊处理（AMLL）">
+          <Switch value={settings.lyricBlur} onChange={(value) => void update({ lyricBlur: value })} />
+        </Row>
+        <Row label="歌词缩放效果" hint="非当前行轻微缩小（AMLL）">
+          <Switch value={settings.lyricScale} onChange={(value) => void update({ lyricScale: value })} />
+        </Row>
+        <Row label="逐字渐变宽度" hint="默认 0.60，模拟 Apple Music 的逐字擦除">
+          <Slider
+            value={settings.wordFade}
+            min={0.05}
+            max={1.5}
+            step={0.05}
+            onChange={(value) => void update({ wordFade: value })}
+          />
+        </Row>
+        <Row label="隐藏已播放歌词" hint="已播放的歌词行淡出隐藏">
+          <Switch value={settings.hidePassed} onChange={(value) => void update({ hidePassed: value })} />
+        </Row>
+        <Row label="显示帧率" hint="在歌词页右上角显示实时帧率">
+          <Switch value={settings.showFps} onChange={(value) => void update({ showFps: value })} />
+        </Row>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionTitle}>歌词源</div>
+        <Row label="来源优先级" hint="按顺序尝试：外挂文件 → 内嵌标签 → 纯文本">
+          <Segmented
+            value={settings.lyricsPriority[0] ?? 'sidecar'}
+            options={[
+              { value: 'sidecar', label: '外挂优先' },
+              { value: 'embedded', label: '内嵌优先' }
+            ]}
+            onChange={(value) =>
+              void update({
+                lyricsPriority:
+                  value === 'sidecar' ? ['sidecar', 'embedded', 'text'] : ['embedded', 'sidecar', 'text']
+              })
+            }
+          />
+        </Row>
+        <Row label="自动回退" hint="当前来源取不到歌词时自动换下一个来源">
+          <Switch value={settings.lyricAutoFallback} onChange={(value) => void update({ lyricAutoFallback: value })} />
+        </Row>
+        <div className={styles.note}>
+          外挂来源支持 .lrc / .ttml / .lys / .yrc / .qrc；内嵌来源读取 SYLT / USLT / ©lyr / LYRICS；纯文本按静态列表显示。
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionTitle}>背景</div>
+        <Row label="显示歌词背景" hint="使用当前专辑封面作为背景">
+          <Switch value={settings.bgEnabled} onChange={(value) => void update({ bgEnabled: value })} />
+        </Row>
+        <Row label="背景类型" hint="流体取色 / 模糊封面 / 深色渐变">
+          <Segmented
+            value={settings.bgType}
+            options={[
+              { value: 'flow', label: '流体背景' },
+              { value: 'blur', label: '模糊封面' },
+              { value: 'solid', label: '深色渐变' }
+            ]}
+            onChange={(value) => void update({ bgType: value })}
+          />
+        </Row>
+        <Row label="流体速度" hint="颜色流动的快慢">
+          <Slider
+            value={settings.bgFlowSpeed}
+            min={0.1}
+            max={4}
+            step={0.05}
+            onChange={(value) => void update({ bgFlowSpeed: value })}
+          />
+        </Row>
+        <Row label="渲染精度" hint="越低越省性能">
+          <Slider
+            value={settings.bgRenderScale}
+            min={0.2}
+            max={1}
+            step={0.05}
+            onChange={(value) => void update({ bgRenderScale: value })}
+          />
+        </Row>
+        <Row label="渲染帧率" hint="0 为静止">
+          <Slider
+            value={settings.bgFps}
+            min={0}
+            max={60}
+            step={1}
+            onChange={(value) => void update({ bgFps: value })}
+          />
+        </Row>
+        <Row label="背景模糊" hint="模糊封面模式下的柔和程度">
+          <Slider
+            value={settings.bgBlur}
+            min={0}
+            max={200}
+            step={2}
+            onChange={(value) => void update({ bgBlur: value })}
+          />
+        </Row>
+        <Row label="背景亮度">
+          <Slider
+            value={settings.bgBrightness}
+            min={0.15}
+            max={1.2}
+            step={0.01}
+            onChange={(value) => void update({ bgBrightness: value })}
+          />
+        </Row>
+        <Row label="背景饱和度">
+          <Slider
+            value={settings.bgSaturate}
+            min={0.5}
+            max={3}
+            step={0.05}
+            onChange={(value) => void update({ bgSaturate: value })}
+          />
+        </Row>
+        <Row label="性能模式" hint="降低背景分辨率与帧率，并关闭歌词模糊与缩放">
+          <Switch value={settings.bgPerf} onChange={(value) => void update({ bgPerf: value })} />
+        </Row>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionTitle}>歌曲信息</div>
+        <Row label="显示专辑名" hint="在歌手下方显示所属专辑">
+          <Switch value={settings.showAlbum} onChange={(value) => void update({ showAlbum: value })} />
+        </Row>
+        <Row label="封面悬停隐藏鼠标" hint="鼠标移到专辑封面上时隐藏指针">
+          <Switch value={settings.coverHideCursor} onChange={(value) => void update({ coverHideCursor: value })} />
+        </Row>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionTitle}>顶栏材质</div>
+        <Row label="顶栏样式" hint="播放栏半透明效果">
+          <Segmented
+            value={settings.barStyle}
+            options={[
+              { value: 'off', label: '关闭' },
+              { value: 'blur', label: '模糊' }
+            ]}
+            onChange={(value) => void update({ barStyle: value })}
+          />
+        </Row>
+        <Row label="不透明度" hint="数值越低越通透">
+          <Slider
+            value={settings.barOpacity}
+            min={0.05}
+            max={0.9}
+            step={0.01}
+            onChange={(value) => void update({ barOpacity: value })}
+          />
+        </Row>
+        <Row label="模糊强度" hint="backdrop-filter 模糊半径">
+          <Slider
+            value={settings.barBlur}
+            min={0}
+            max={60}
+            step={1}
+            onChange={(value) => void update({ barBlur: value })}
+          />
+        </Row>
+        <Row label="封面映射强度" hint="顶栏透出专辑封面">
+          <Slider
+            value={settings.barCover}
+            min={0}
+            max={0.9}
+            step={0.01}
+            onChange={(value) => void update({ barCover: value })}
           />
         </Row>
       </section>

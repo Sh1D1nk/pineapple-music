@@ -909,3 +909,96 @@
     transform: none;
   }
 }
+
+/* ------------------------------------------------- Q 弹按压（对齐插件 saPushL/R/C） */
+
+@keyframes fsPushL {
+  0% {
+    transform: none;
+  }
+  34% {
+    transform: translateX(-16%) scale(0.84);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes fsPushR {
+  0% {
+    transform: none;
+  }
+  34% {
+    transform: translateX(16%) scale(0.84);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes fsPushC {
+  0% {
+    transform: none;
+  }
+  40% {
+    transform: scale(0.86);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.fsPushL {
+  animation: fsPushL 0.44s cubic-bezier(0.34, 1.32, 0.5, 1);
+}
+
+.fsPushR {
+  animation: fsPushR 0.44s cubic-bezier(0.34, 1.32, 0.5, 1);
+}
+
+.fsPushC {
+  animation: fsPushC 0.44s cubic-bezier(0.34, 1.32, 0.5, 1);
+}
+
+/* 切歌时封面交叉淡入（插件的封面过渡） */
+@keyframes fsCoverIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fsCoverEnter {
+  animation: fsCoverIn 0.34s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* 右上角实时帧率 */
+.fsFps {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: 4;
+  font-family: Consolas, 'Fira Code', monospace;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.62);
+  background: rgba(0, 0, 0, 0.32);
+  padding: 3px 8px;
+  border-radius: 7px;
+  pointer-events: none;
+}
+
+/* 关闭条：悬停展开成圆角方块并浮出 X（用 data 属性切换，避免 CSS Module 类名被 hash） */
+.fsClose[data-expanded='1'] .fsChip {
+  width: clamp(24px, 3.4vh, 40px);
+  height: clamp(24px, 3.4vh, 40px);
+  border-radius: clamp(6px, 0.9vh, 11px);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.fsClose[data-expanded='1'] .fsX {
+  opacity: 0.95;
+  transform: none;
+}

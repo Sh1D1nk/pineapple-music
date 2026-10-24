@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, type JSX } from 'react'
 import { Icon } from './Icon'
 import { Cover } from './Cover'
 import { useStore } from '../state/store'
+import { coverUrl } from '../bridge'
 import { albumKeyOf } from '../lib/group'
 import { useAutoMix } from '../audio/automix'
 import { formatRemaining, formatTime } from '../lib/format'
@@ -123,6 +124,7 @@ function VolumeGroup(): JSX.Element {
 }
 
 function NowPlayingPill(): JSX.Element {
+  const settings = useStore((s) => s.settings)
   const queue = useStore((s) => s.playback.queue)
   const index = useStore((s) => s.playback.index)
   const songs = useStore((s) => s.songs)
@@ -151,7 +153,8 @@ function NowPlayingPill(): JSX.Element {
 
   return (
     <div
-      className={`glass glassFull ${styles.nowPlaying}`}
+      className={`glass glassFull glassBar ${styles.nowPlaying}`}
+      data-bar-style={settings.barStyle}
       onPointerEnter={() => setHovering(true)}
       onPointerLeave={() => setHovering(false)}
       // 整块胶囊都能点开全屏歌词：之前只有 34px 的封面和歌名可点，点空白处「没反应」
@@ -171,6 +174,13 @@ function NowPlayingPill(): JSX.Element {
     >
       {song ? (
         <>
+          {settings.barStyle === 'blur' && song.coverId && (
+            <span
+              className={styles.coverTint}
+              style={{ backgroundImage: `url(${coverUrl(song.coverId, 240)})`, opacity: settings.barCover }}
+              aria-hidden="true"
+            />
+          )}
           <button
             type="button"
             className={styles.coverWrap}
@@ -309,8 +319,19 @@ function PanelGroup(): JSX.Element {
 }
 
 export function TopBar(): JSX.Element {
+  const settings = useStore((s) => s.settings)
   return (
-    <div className={styles.bar}>
+    <div
+      className={styles.bar}
+      style={
+        {
+          '--bar-blur': `${settings.barBlur}px`,
+          '--bar-opacity': String(settings.barOpacity),
+          '--bar-cover': String(settings.barCover)
+        } as React.CSSProperties
+      }
+      data-bar-style={settings.barStyle}
+    >
       {/* 拖拽交给背后这条独立的带子：交互元素不在拖拽区里，点击永远不会被合成器吃掉 */}
       <div className={`dragRegion ${styles.dragStrip}`} aria-hidden="true" />
       <div className="noDrag">
