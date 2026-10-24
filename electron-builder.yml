@@ -1,0 +1,46 @@
+appId: com.pineapple.music
+productName: Pineapple Music
+copyright: Copyright © 2026 Pineapple Music
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+  - '!**/{test,tests,__tests__,demo,examples,docs}/**'
+  # onnxruntime-node 自带三平台二进制，安装包只需要 win32 的那一份
+  - '!**/node_modules/onnxruntime-node/bin/napi-v6/darwin/**'
+  - '!**/node_modules/onnxruntime-node/bin/napi-v6/linux/**'
+
+asarUnpack:
+  - '**/node_modules/better-sqlite3/**'
+  - '**/node_modules/ffmpeg-static/**'
+  # 原生 .node + .dll 必须落在 asar 外面才加载得到
+  - '**/node_modules/onnxruntime-node/**'
+
+extraResources:
+  - from: resources/bin
+    to: bin
+
+# better-sqlite3 ships Node-API prebuilds, so the binary works in Electron without a toolchain.
+npmRebuild: false
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Pineapple Music
+  deleteAppDataOnUninstall: false

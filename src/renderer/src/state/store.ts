@@ -1,0 +1,664 @@
+import { create } from 'zustand'
+import type {
+  AnalysisProgress,
+  AppSettings,
+  LibraryBatch,
+  LyricsPayload,
+  QueueItem,
+  RepeatMode,
+  ScanProgress,
+  SongMeta
+} from '@shared/types'
+import { DEFAULT_SETTINGS } from '@shared/types'
+import { bridge } from '../bridge'
+import { engine, type EngineSnapshot } from '../audio/engine'
+
+export type View =
+  | { kind: 'recent' }
+  | { kind: 'songs' }
+  | { kind: 'albums' }
+  | { kind: 'artists' }
+  | { kind: 'album'; key: string }
+  | { kind: 'artist'; name: string }
+  | { kind: 'search' }
+  | { kind: 'settings' }
+  | { kind: 'lab' }
+
+export interface ContextMenuState {
+  x: number
+  y: number
+  songId: string
+  albumKey?: string
+}
+
+export interface Toast {
+  id: number
+  text: string
+}
+
+let keySeq = 0
+const newKey = (): string => `q${++keySeq}`
+
+export const queueItemOf = (songId: string): QueueItem => ({ key: newKey(), songId })
+
+interface PlaybackState {
+  queue: QueueItem[]
+  index: number
+  history: string[]
+  playing: boolean
+  position: number
+  duration: number
+  volume: number
+  muted: boolean
+  shuffle: boolean
+  repeat: RepeatMode
+  autoMixLabel: string | null
+}
+
+interface StoreState {
+  ready: boolean
+  songs: Record<string, SongMeta>
+  songIds: string[]
+  folders: { path: string; addedAt: number }[]
+  scan: ScanProgress
+  analysis: AnalysisProgress
+  settings: AppSettings
+  view: View
+  /** 供鼠标侧键 / Esc 用的返回栈，只在主导航与详情页之间记录 */
+  viewHistory: View[]
+  navDirection: 'up' | 'down' | 'none'
+  search: string
+  queueOpen: boolean
+  lyricsOpen: boolean
+  fullscreen: boolean
+  infoSongId: string | null
+  settingsSection: string | null
+  contextMenu: ContextMenuState | null
+  toasts: Toast[]
+  dragActive: boolean
+  playback: PlaybackState
+  lyrics: LyricsPayload | null
+  lyricsLoading: boolean
+
+  init: () => Promise<void>
+  setView: (view: View, options?: { silent?: boolean }) => void
+  goBack: () => void
+  setSearch: (value: string) => void
+  setQueueOpen: (open: boolean) => void
+  setLyricsOpen: (open: boolean) => void
+  setFullscreen: (open: boolean) => void
+  setInfoSongId: (id: string | null) => void
+  setContextMenu: (menu: ContextMenuState | null) => void
+  setDragActive: (active: boolean) => void
+  pushToast: (text: string) => void
+  dismissToast: (id: number) => void
+
+  playSongs: (ids: string[], startIndex: number) => void
+  playSongNow: (id: string) => void
+  togglePlay: () => void
+  next: (auto?: boolean) => void
+  prev: () => void
+  seek: (seconds: number) => void
+  setVolume: (value: number) => void
+  toggleMute: () => void
+  toggleShuffle: () => void
+  cycleRepeat: () => void
+  addNext: (ids: string[]) => void
+  addLater: (ids: string[]) => void
+  removeFromQueue: (key: string) => void
+  clearQueue: () => void
+  moveInQueue: (from: number, to: number) => void
+  jumpToQueueIndex: (index: number) => void
+
+  updateSettings: (patch: Partial<AppSettings>) => Promise<void>
+  applyBatch: (batch: LibraryBatch) => void
+  setAnalysis: (progress: AnalysisProgress) => void
+  setScan: (progress: ScanProgress) => void
+  loadLyrics: (songId: string | null) => Promise<void>
+}
+
+const emptyScan: ScanProgress = {
+  active: false,
+  stage: 'idle',
+  processed: 0,
+  total: 0,
+  currentTitle: '',
+  folder: null
+}
+
+const emptyAnalysis: AnalysisProgress = {
+  active: false,
+  done: 0,
+  total: 0,
+  stage: 'idle',
+  currentTitle: '',
+  failures: [],
+  ratePerMin: 0,
+  etaSec: null,
+  paused: false,
+  gpu: 'none',
+  workers: 1
+}
+
+const PERSIST_KEY = 'localmusic.playback.v1'
+
+interface Persisted {
+  songId: string | null
+  position: number
+  queue: string[]
+  index: number
+  volume: number
+  shuffle: boolean
+  repeat: RepeatMode
+  view: View
+}
+
+function readPersisted(): Persisted | null {
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as Persisted
+  } catch {
+    return null
+  }
+}
+
+let persistTimer: number | null = null
+let initPromise: Promise<void> | null = null
+function persist(state: StoreState): void {
+  if (persistTimer !== null) window.clearTimeout(persistTimer)
+  persistTimer = window.setTimeout(() => {
+    const current = state.playback.queue[state.playback.index]
+    const payload: Persisted = {
+      songId: current?.songId ?? null,
+      position: state.playback.position,
+      queue: state.playback.queue.map((item) => item.songId),
+      index: state.playback.index,
+      volume: state.playback.volume,
+      shuffle: state.playback.shuffle,
+      repeat: state.playback.repeat,
+      view: state.view
+    }
+    try {
+      localStorage.setItem(PERSIST_KEY, JSON.stringify(payload))
+    } catch {
+      /* storage full — playback position is not worth failing over */
+    }
+  }, 1200)
+}
+
+function shuffleArray<T>(items: T[]): T[] {
+  const out = [...items]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const a = out[i]!
+    out[i] = out[j]!
+    out[j] = a
+  }
+  return out
+}
+
+export const useStore = create<StoreState>((set, get) => {
+  const syncEngine = (snapshot: EngineSnapshot): void => {
+    const state = get()
+    const cp = state.playback
+    const songId = snapshot.songId
+    let queue = cp.queue
+    let index = cp.index
+    if (songId && queue[index]?.songId !== songId) {
+      const found = queue.findIndex((item) => item.songId === songId)
+      if (found >= 0) index = found
+    }
+    set({
+      playback: {
+        ...cp,
+        queue,
+        index,
+        playing: snapshot.playing,
+        position: snapshot.position,
+        duration: snapshot.duration || cp.duration,
+        volume: snapshot.volume,
+        muted: snapshot.muted
+      }
+    })
+    persist(get())
+  }
+
+  engine.on(syncEngine)
+
+  return {
+    ready: false,
+    songs: {},
+    songIds: [],
+    folders: [],
+    scan: emptyScan,
+    analysis: emptyAnalysis,
+    settings: DEFAULT_SETTINGS,
+    view: { kind: 'recent' },
+    viewHistory: [],
+    navDirection: 'none',
+    search: '',
+    queueOpen: false,
+    lyricsOpen: false,
+    fullscreen: false,
+    infoSongId: null,
+    settingsSection: null,
+    contextMenu: null,
+    toasts: [],
+    dragActive: false,
+    lyrics: null,
+    lyricsLoading: false,
+    playback: {
+      queue: [],
+      index: 0,
+      history: [],
+      playing: false,
+      position: 0,
+      duration: 0,
+      volume: 0.85,
+      muted: false,
+      shuffle: false,
+      repeat: 'off',
+      autoMixLabel: null
+    },
+
+    async init() {
+      if (initPromise) return initPromise
+      initPromise = (async () => {
+        // Subscribe first: a folder can be added while the initial snapshot is still in flight,
+        // and those batches must not be lost.
+        const buffered: LibraryBatch[] = []
+        let collecting = true
+        const onBatch = (batch: LibraryBatch): void => {
+          if (collecting) buffered.push(batch)
+          else get().applyBatch(batch)
+        }
+        const offBatch = bridge.on('library/batch', onBatch as never)
+        bridge.on('library/progress', ((progress: ScanProgress) => get().setScan(progress)) as never)
+        bridge.on('library/folders', ((folders: { path: string; addedAt: number }[]) => set({ folders })) as never)
+        bridge.on('analysis/progress', ((progress: AnalysisProgress) => get().setAnalysis(progress)) as never)
+        bridge.on('media/key', ((key: string) => {
+          if (key === 'toggle') get().togglePlay()
+          else if (key === 'next') get().next()
+          else if (key === 'previous') get().prev()
+        }) as never)
+        bridge.on('lyrics/invalidated', (() => {
+          const songId = engine.snapshot().songId
+          void get().loadLyrics(songId)
+        }) as never)
+
+        const [snapshot, settings] = await Promise.all([bridge.snapshot(), bridge.settings()])
+        const map: Record<string, SongMeta> = {}
+        for (const song of snapshot.songs) map[song.id] = song
+        const ids = snapshot.songs
+          .slice()
+          .sort((a, b) => b.addedAt - a.addedAt)
+          .map((s) => s.id)
+        const analysis = await bridge.analysisProgress().catch(() => emptyAnalysis)
+        set({
+          ready: true,
+          songs: map,
+          songIds: ids,
+          folders: snapshot.folders,
+          scan: snapshot.progress,
+          settings,
+          analysis
+        })
+
+        collecting = false
+        for (const batch of buffered) get().applyBatch(batch)
+        void offBatch
+
+        const persisted = readPersisted()
+        if (persisted) {
+          const queue = persisted.queue
+            .filter((id) => map[id])
+            .map((id) => ({ key: newKey(), songId: id }))
+          set({
+            view: persisted.view ?? { kind: 'recent' },
+            playback: {
+              ...get().playback,
+              queue,
+              index: Math.min(persisted.index ?? 0, Math.max(0, queue.length - 1)),
+              volume: persisted.volume ?? 0.85,
+              shuffle: persisted.shuffle ?? false,
+              repeat: persisted.repeat ?? 'off'
+            }
+          })
+          const current = queue[persisted.index ?? 0]
+          if (current) {
+            const song = map[current.songId]
+            if (song) {
+              await engine.load(song, { autoplay: false, position: persisted.position ?? 0 })
+              void get().loadLyrics(song.id)
+            }
+          }
+        }
+
+        engine.setVolume(get().playback.volume)
+        engine.setEndedHandler(() => {
+          const state = get()
+          if (state.playback.repeat === 'one' && state.playback.queue[state.playback.index]) {
+            const song = state.songs[state.playback.queue[state.playback.index]!.songId]
+            if (song) void engine.load(song, { autoplay: true, position: 0 })
+            return
+          }
+          get().next(true)
+        })
+      })()
+      return initPromise
+    },
+
+    setView(view, options) {
+      const current = get().view
+      const same =
+        current.kind === view.kind &&
+        JSON.stringify(current) === JSON.stringify(view)
+      if (same) return
+      // 主导航（最近添加/艺人/专辑/歌曲）的高低决定内容进出方向，做成「向上/向下滚过」的观感
+      const order = (v: View): number =>
+        v.kind === 'recent' ? 0 : v.kind === 'artists' ? 1 : v.kind === 'albums' ? 2 : v.kind === 'songs' ? 3 : -1
+      const from = order(current)
+      const to = order(view)
+      const navDirection =
+        from >= 0 && to >= 0 && from !== to ? (to > from ? 'down' : 'up') : 'none'
+      const history = options?.silent ? get().viewHistory : [...get().viewHistory, current].slice(-24)
+      set({ view, viewHistory: history, navDirection })
+      persist(get())
+    },
+
+    goBack() {
+      const history = get().viewHistory
+      if (history.length === 0) {
+        if (get().fullscreen) get().setFullscreen(false)
+        else if (get().lyricsOpen) get().setLyricsOpen(false)
+        else if (get().queueOpen) get().setQueueOpen(false)
+        return
+      }
+      const previous = history[history.length - 1]!
+      set({ view: previous, viewHistory: history.slice(0, -1), navDirection: 'up' })
+      persist(get())
+    },
+    setSearch(value) {
+      set({ search: value, view: value.length > 0 ? { kind: 'search' } : { kind: 'recent' } })
+    },
+    setQueueOpen(open) {
+      set(open ? { queueOpen: true, lyricsOpen: false } : { queueOpen: false })
+    },
+    setLyricsOpen(open) {
+      set(open ? { lyricsOpen: true, queueOpen: false } : { lyricsOpen: false })
+    },
+    setFullscreen(open) {
+      // 只做应用内全屏：切换系统全屏会把窗口状态搅乱（尤其在最大化时），
+      // 真正的系统全屏留给 F11。
+      set({ fullscreen: open })
+    },
+    setInfoSongId(id) {
+      set({ infoSongId: id })
+    },
+    setContextMenu(menu) {
+      set({ contextMenu: menu })
+    },
+    setDragActive(active) {
+      set({ dragActive: active })
+    },
+    pushToast(text) {
+      const id = Date.now() + Math.random()
+      set({ toasts: [...get().toasts, { id, text }] })
+      window.setTimeout(() => get().dismissToast(id), 4200)
+    },
+    dismissToast(id) {
+      set({ toasts: get().toasts.filter((t) => t.id !== id) })
+    },
+
+    playSongs(ids, startIndex) {
+      if (ids.length === 0) return
+      const items = ids.map((songId) => ({ key: newKey(), songId }))
+      const index = Math.max(0, Math.min(startIndex, items.length - 1))
+      set({ playback: { ...get().playback, queue: items, index, history: [] } })
+      const song = get().songs[items[index]!.songId]
+      if (song) {
+        void engine.load(song, { autoplay: true, position: 0 })
+        void get().loadLyrics(song.id)
+      }
+      void bridge.orderAnalysis(ids)
+      persist(get())
+    },
+
+    playSongNow(id) {
+      const state = get()
+      const existing = state.playback.queue.findIndex((item) => item.songId === id)
+      if (existing >= 0) {
+        state.jumpToQueueIndex(existing)
+        return
+      }
+      state.playSongs([id], 0)
+    },
+
+    togglePlay() {
+      void engine.toggle()
+    },
+
+    next(auto = false) {
+      const state = get()
+      const { queue, index, repeat, shuffle } = state.playback
+      if (queue.length === 0) return
+      const currentSong = state.songs[queue[index]?.songId ?? '']
+      if (auto && currentSong) {
+        state.playback.history.push(currentSong.id)
+      }
+      let nextIndex = index + 1
+      if (nextIndex >= queue.length) {
+        if (repeat === 'all') {
+          nextIndex = 0
+          if (shuffle) {
+            const shuffled = shuffleArray(queue).map((item) => ({ ...item, key: newKey() }))
+            set({ playback: { ...state.playback, queue: shuffled, index: 0 } })
+            const song = state.songs[shuffled[0]!.songId]
+            if (song) {
+              void engine.load(song, { autoplay: true, position: 0 })
+              void state.loadLyrics(song.id)
+            }
+            return
+          }
+        } else {
+          return
+        }
+      }
+      const item = queue[nextIndex]
+      if (!item) return
+      const song = state.songs[item.songId]
+      set({ playback: { ...state.playback, index: nextIndex } })
+      if (song) {
+        void engine.crossfadeTo(song, { position: 0, duration: auto ? 1.2 : 0.7 })
+        void state.loadLyrics(song.id)
+      }
+      persist(get())
+    },
+
+    prev() {
+      const state = get()
+      const { queue, index } = state.playback
+      if (queue.length === 0) return
+      if (state.playback.position > 3) {
+        state.seek(0)
+        return
+      }
+      const prevIndex = Math.max(0, index - 1)
+      const item = queue[prevIndex]
+      if (!item) return
+      const song = state.songs[item.songId]
+      set({ playback: { ...state.playback, index: prevIndex } })
+      if (song) {
+        void engine.crossfadeTo(song, { position: 0, duration: 0.7 })
+        void state.loadLyrics(song.id)
+      }
+      persist(get())
+    },
+
+    seek(seconds) {
+      const state = get()
+      engine.seek(seconds)
+      set({ playback: { ...state.playback, position: seconds } })
+    },
+
+    setVolume(value) {
+      engine.setVolume(value)
+      set({ playback: { ...get().playback, volume: value, muted: false } })
+      engine.setMuted(false)
+      persist(get())
+    },
+
+    toggleMute() {
+      const muted = !get().playback.muted
+      engine.setMuted(muted)
+      set({ playback: { ...get().playback, muted } })
+    },
+
+    toggleShuffle() {
+      const state = get()
+      const shuffle = !state.playback.shuffle
+      const { queue, index } = state.playback
+      if (queue.length === 0) {
+        set({ playback: { ...state.playback, shuffle } })
+        return
+      }
+      const current = queue[index]!
+      const rest = queue.filter((_, i) => i !== index)
+      const nextQueue = shuffle
+        ? [current, ...shuffleArray(rest).map((item) => ({ ...item, key: newKey() }))]
+        : [current, ...rest]
+      set({ playback: { ...state.playback, shuffle, queue: nextQueue, index: 0 } })
+      persist(get())
+    },
+
+    cycleRepeat() {
+      const state = get()
+      const order: RepeatMode[] = ['off', 'all', 'one']
+      const current = order.indexOf(state.playback.repeat)
+      const repeat = order[(current + 1) % order.length]!
+      set({ playback: { ...state.playback, repeat } })
+      persist(get())
+    },
+
+    addNext(ids) {
+      const state = get()
+      const { queue, index } = state.playback
+      const items = ids.map((songId) => ({ key: newKey(), songId }))
+      const nextQueue = [...queue.slice(0, index + 1), ...items, ...queue.slice(index + 1)]
+      set({ playback: { ...state.playback, queue: nextQueue } })
+      state.pushToast(`已加入 ${ids.length} 首，接下来播放`)
+      persist(get())
+    },
+
+    addLater(ids) {
+      const state = get()
+      const items = ids.map((songId) => ({ key: newKey(), songId }))
+      set({ playback: { ...state.playback, queue: [...state.playback.queue, ...items] } })
+      state.pushToast(`已加入 ${ids.length} 首到待播清单`)
+      persist(get())
+    },
+
+    removeFromQueue(key) {
+      const state = get()
+      const { queue, index } = state.playback
+      const at = queue.findIndex((item) => item.key === key)
+      if (at < 0) return
+      const nextQueue = queue.filter((item) => item.key !== key)
+      const nextIndex = at < index ? index - 1 : index
+      set({ playback: { ...state.playback, queue: nextQueue, index: Math.max(0, Math.min(nextIndex, nextQueue.length - 1)) } })
+      persist(get())
+    },
+
+    clearQueue() {
+      const state = get()
+      const current = state.playback.queue[state.playback.index]
+      const queue = current ? [current] : []
+      set({ playback: { ...state.playback, queue, index: 0 } })
+      persist(get())
+    },
+
+    moveInQueue(from, to) {
+      const state = get()
+      const { queue, index } = state.playback
+      if (from === to || from < 0 || to < 0 || from >= queue.length || to >= queue.length) return
+      const nextQueue = [...queue]
+      const [moved] = nextQueue.splice(from, 1)
+      if (!moved) return
+      nextQueue.splice(to, 0, moved)
+      let nextIndex = index
+      if (index === from) nextIndex = to
+      else if (from < index && to >= index) nextIndex = index - 1
+      else if (from > index && to <= index) nextIndex = index + 1
+      set({ playback: { ...state.playback, queue: nextQueue, index: nextIndex } })
+      persist(get())
+    },
+
+    jumpToQueueIndex(index) {
+      const state = get()
+      const item = state.playback.queue[index]
+      if (!item) return
+      const song = state.songs[item.songId]
+      set({ playback: { ...state.playback, index } })
+      if (song) {
+        void engine.load(song, { autoplay: true, position: 0 })
+        void state.loadLyrics(song.id)
+      }
+      persist(get())
+    },
+
+    async updateSettings(patch) {
+      const settings = await bridge.saveSettings(patch)
+      set({ settings })
+    },
+
+    applyBatch(batch) {
+      const state = get()
+      const songs = { ...state.songs }
+      for (const song of batch.added) songs[song.id] = song
+      for (const song of batch.updated) songs[song.id] = song
+      for (const id of batch.removed) delete songs[id]
+      const ids = Object.values(songs)
+        .sort((a, b) => b.addedAt - a.addedAt)
+        .map((s) => s.id)
+      let playback = state.playback
+      if (batch.removed.length > 0) {
+        const removed = new Set(batch.removed)
+        const queue = playback.queue.filter((item) => !removed.has(item.songId))
+        if (queue.length !== playback.queue.length) {
+          playback = { ...playback, queue, index: Math.min(playback.index, Math.max(0, queue.length - 1)) }
+        }
+      }
+      set({ songs, songIds: ids, playback, scan: batch.progress })
+      persist(get())
+    },
+
+    setAnalysis(progress) {
+      set({ analysis: progress })
+    },
+
+    setScan(progress) {
+      set({ scan: progress })
+    },
+
+    async loadLyrics(songId) {
+      if (!songId) {
+        set({ lyrics: null })
+        return
+      }
+      set({ lyricsLoading: true })
+      const payload = await bridge.lyrics(songId)
+      if (get().playback.queue[get().playback.index]?.songId !== songId) {
+        // A newer track started while this request was in flight.
+        set({ lyricsLoading: false })
+        return
+      }
+      set({ lyrics: payload, lyricsLoading: false })
+    }
+  }
+})
+
+if (typeof window !== 'undefined') {
+  // 诊断用：控制台可直接读 store 状态
+  ;(window as unknown as { __store?: unknown }).__store = useStore
+}

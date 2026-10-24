@@ -1,0 +1,10 @@
+node_modules/
+out/
+dist/
+dist-*/
+release*/
+fixtures/
+screenshots/
+*.log
+.DS_Store
+.vite/

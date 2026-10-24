@@ -1,0 +1,911 @@
+.panel {
+  position: absolute;
+  top: 64px;
+  right: 8px;
+  bottom: 8px;
+  width: 380px;
+  border-radius: 22px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateX(calc(100% + 20px));
+  transition: transform var(--dur-panel) var(--ease-panel);
+  will-change: transform;
+}
+
+.panelOpen {
+  transform: translateX(0);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px 8px;
+  gap: 8px;
+}
+
+.panelTitle {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.textButton {
+  font-size: 12px;
+  color: var(--accent);
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.textButton:hover {
+  background: var(--hover);
+}
+
+/* --------------------------------------------------------------- queue */
+
+.queueBody {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 4px 10px 14px;
+}
+
+.queueGroupTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 10px 8px 6px;
+}
+
+.queueRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 8px;
+  border-radius: 8px;
+  position: relative;
+}
+
+.queueRow:hover {
+  background: var(--hover);
+}
+
+.queueRowDragging {
+  background: var(--selected);
+  z-index: 2;
+}
+
+.queueRowCurrent .queueTitle {
+  color: var(--accent);
+}
+
+.queueMeta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.queueTitle {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.queueArtist {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.queueDuration {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.queueRemove {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--selected);
+  color: var(--text-secondary);
+}
+
+.queueRow:hover .queueRemove {
+  display: flex;
+}
+
+.queueEmpty {
+  padding: 30px 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.historyToggle {
+  margin-top: 8px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-radius: 8px;
+}
+
+.historyToggle:hover {
+  background: var(--hover);
+}
+
+/* --------------------------------------------------------------- lyrics panel */
+
+.lyricsPanel {
+  background: #101012;
+  box-shadow: var(--glass-shadow), inset 0 0 0 1px var(--glass-stroke);
+}
+
+.lyricsBg {
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  overflow: hidden;
+  opacity: 0.92;
+}
+
+.lyricsContent {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.lyricsHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px 10px;
+}
+
+.lyricsHeaderText {
+  min-width: 0;
+}
+
+.lyricsHeaderTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.lyricsHeaderArtist {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.lyricsBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 14px 24px;
+}
+
+.lyricsEmpty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+}
+
+/* --------------------------------------------------------------- fullscreen */
+
+/* 版式对齐参考实现的 sa-stage：左 50% 是「关闭条 / 封面 / 曲名 / 进度 / 控制 / 音量」，
+   右 50% 是 AMLL 歌词，歌词列上下用 mask 渐隐、右侧留 8% 内边距。 */
+.fullscreen {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  transform: translateY(100%);
+  transition: transform var(--dur-screen) var(--ease-panel);
+  overflow: hidden;
+  background: #0d0d0f;
+  color: #fff;
+}
+
+.fullscreenOpen {
+  transform: translateY(0);
+}
+
+.fsBg {
+  position: absolute;
+  inset: 0;
+  filter: saturate(1.15);
+}
+
+.fsTint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.14) 40%, rgba(0, 0, 0, 0.4));
+}
+
+.fsVignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(130% 110% at 25% 10%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.5) 78%);
+}
+
+.fsStage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  font-size: clamp(13px, 2.17vh, 26px);
+  z-index: 2;
+}
+
+.fsLeft {
+  flex: 1 1 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 100%;
+  padding: 0 2vw;
+  transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+/* 无歌词：左栏滑到中间，歌词列整体滑出（纯 transform，不触发 AMLL 重排） */
+.fsNoLyric .fsLeft {
+  transform: translateX(50%);
+}
+
+.fsNoLyric .fsLyric {
+  transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 全屏右上角的两个入口：与关闭条同一套玻璃语言，尺寸更小 */
+.fsCorner {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+}
+
+.fsCornerButton {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px) saturate(1.6);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  transition: background 0.2s ease, transform 0.18s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.fsCornerButton:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.fsCornerButton:active {
+  transform: scale(0.92);
+}
+
+/* 关闭条：悬停时由横杠变成圆角方块并浮出 X */
+.fsClose {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(44px, 6vh, 66px);
+  height: clamp(28px, 4.2vh, 46px);
+  margin-bottom: 2.6vh;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+  transition: transform 0.22s cubic-bezier(0.22, 1.2, 0.36, 1);
+}
+
+.fsChip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(40px, 5.6vh, 64px);
+  height: clamp(7px, 1.05vh, 12px);
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.32);
+  transition:
+    width 0.36s cubic-bezier(0.34, 1.4, 0.5, 1),
+    height 0.36s cubic-bezier(0.34, 1.4, 0.5, 1),
+    border-radius 0.36s cubic-bezier(0.34, 1.4, 0.5, 1),
+    background-color 0.3s ease;
+}
+
+.fsClose:hover .fsChip,
+.fsClose:focus-visible .fsChip {
+  width: clamp(24px, 3.4vh, 40px);
+  height: clamp(24px, 3.4vh, 40px);
+  border-radius: clamp(6px, 0.9vh, 11px);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.fsX {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60%;
+  height: 60%;
+  color: #0d0d0d;
+  opacity: 0;
+  transform: scale(0.4) rotate(-60deg);
+  transition:
+    opacity 0.22s ease,
+    transform 0.36s cubic-bezier(0.34, 1.4, 0.5, 1);
+  pointer-events: none;
+}
+
+.fsClose:hover .fsX,
+.fsClose:focus-visible .fsX {
+  opacity: 0.95;
+  transform: none;
+}
+
+/* 封面：暂停缩小、播放回弹，弹性曲线与插件一致 */
+.fsCover {
+  position: relative;
+  width: min(52vh, 37vw);
+  height: min(52vh, 37vw);
+  border-radius: 3%;
+  overflow: hidden;
+  box-shadow: 0 16px 24px rgba(0, 0, 0, 0.25), 0 32px 64px rgba(0, 0, 0, 0.2);
+  transform: scale(0.84);
+  transition: box-shadow 0.5s ease, transform 0.72s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.fsCoverPlaying {
+  transform: scale(1.03);
+}
+
+.fsCover img,
+.fsCover > div {
+  width: 100%;
+  height: 100%;
+}
+
+.fsInfo {
+  width: min(52vh, 37vw);
+  max-width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 4.4vh;
+}
+
+.fsMeta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.fsMetaText {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.fsName {
+  font-size: 1.28em;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  line-height: 1.3;
+  user-select: text;
+}
+
+.fsArtistLine {
+  font-size: 0.9em;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  opacity: 0.55;
+  line-height: 1.45;
+  margin-top: 3px;
+}
+
+.fsAlbumLine {
+  font-size: 0.78em;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  opacity: 0.35;
+  margin-top: 1px;
+}
+
+.fsMore {
+  flex: 0 0 auto;
+  width: clamp(26px, 4.2vh, 46px);
+  height: clamp(26px, 4.2vh, 46px);
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.fsMore:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.fsMore:active {
+  transform: scale(0.92);
+}
+
+.fsProgress {
+  margin-top: 2.2vh;
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.fsProgressInner {
+  flex: 1;
+  width: 100%;
+  height: clamp(3px, 0.5vh, 6px);
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+  transition: height 0.3s cubic-bezier(0.38, 1.625, 0.62, 0.995);
+}
+
+.fsProgress:hover .fsProgressInner,
+.fsProgress:active .fsProgressInner {
+  height: clamp(5px, 0.75vh, 9px);
+}
+
+.fsProgressFill {
+  height: 100%;
+  background: #fff;
+  opacity: 0.55;
+  border-radius: 100px;
+  transition: opacity 0.2s;
+}
+
+.fsProgress:hover .fsProgressFill {
+  opacity: 0.85;
+}
+
+.fsTimes {
+  display: flex;
+  margin-top: 7px;
+  font-weight: 400;
+  opacity: 0.45;
+  font-size: 0.72em;
+  letter-spacing: 0.5px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.fsTimes > * {
+  flex: 1;
+}
+
+.fsTimes > *:last-child {
+  text-align: right;
+}
+
+.fsControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.6vh;
+}
+
+.fsMode,
+.fsPrev,
+.fsPlay,
+.fsNext {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  position: relative;
+  transition: background-color 0.3s, opacity 0.3s, transform 0.15s;
+}
+
+.fsMode:active,
+.fsPrev:active,
+.fsPlay:active,
+.fsNext:active {
+  transform: scale(0.9);
+}
+
+.fsMode {
+  width: clamp(16px, 2.2vh, 26px);
+  height: clamp(16px, 2.2vh, 26px);
+  opacity: 0.55;
+}
+
+.fsMode:hover {
+  opacity: 0.85;
+}
+
+.fsModeOn {
+  opacity: 1;
+}
+
+.fsModeOn::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.fsPrev,
+.fsNext {
+  width: clamp(28px, 5vh, 40px);
+  height: clamp(28px, 5vh, 40px);
+}
+
+.fsPlay {
+  width: clamp(34px, 6.2vh, 52px);
+  height: clamp(34px, 6.2vh, 52px);
+}
+
+.fsPrev:hover,
+.fsNext:hover,
+.fsPlay:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.fsVolume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2vh;
+}
+
+.fsVicon {
+  flex: 0 0 auto;
+  color: #fff;
+  opacity: 0.55;
+}
+
+.fsVolumeTrack {
+  position: relative;
+  flex: 1 1 auto;
+  height: clamp(3px, 0.5vh, 6px);
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.fsVolumeFill {
+  height: 100%;
+  background: #fff;
+  opacity: 0.55;
+  border-radius: 100px;
+  transition: opacity 0.2s;
+}
+
+.fsVolumeTrack:hover .fsVolumeFill {
+  opacity: 0.85;
+}
+
+.fsLyric {
+  position: relative;
+  flex: 1 1 50%;
+  min-width: 0;
+  height: 100%;
+  padding-right: 8%;
+  box-sizing: border-box;
+  transition:
+    transform 0.55s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 2%, #000 12%, #000 88%, transparent 98%);
+  mask-image: linear-gradient(to bottom, transparent 2%, #000 12%, #000 88%, transparent 98%);
+}
+
+.fsEmpty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 1.05em;
+  color: rgba(255, 255, 255, 0.42);
+  pointer-events: none;
+}
+
+.fsEmptyHint {
+  font-size: 0.72em;
+  color: rgba(255, 255, 255, 0.28);
+}
+
+/* --------------------------------------------------------------- context menu */
+
+.menu {
+  position: fixed;
+  min-width: 208px;
+  padding: 5px;
+  border-radius: 16px;
+  background: var(--menu-bg);
+  backdrop-filter: blur(28px) saturate(1.8);
+  box-shadow: var(--glass-shadow), inset 0 0 0 1px var(--glass-stroke);
+  z-index: 80;
+  animation: menuIn 140ms var(--ease);
+}
+
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.menuItem:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.menuShortcut {
+  font-size: 11px;
+  opacity: 0.5;
+}
+
+.menuSeparator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--separator);
+}
+
+/* --------------------------------------------------------------- modal */
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 70;
+  animation: fadeIn 180ms var(--ease);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  width: 520px;
+  max-height: 640px;
+  border-radius: 24px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--menu-bg);
+  backdrop-filter: blur(32px) saturate(1.8);
+  box-shadow: var(--glass-shadow), inset 0 0 0 1px var(--glass-stroke);
+  animation: modalIn 220ms var(--ease);
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.modalHeader {
+  display: flex;
+  gap: 14px;
+  padding: 18px 18px 12px;
+  align-items: center;
+}
+
+.modalCover {
+  width: 96px;
+  height: 96px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--card-shadow);
+  flex: 0 0 auto;
+}
+
+.modalCover img,
+.modalCover > div {
+  width: 100%;
+  height: 100%;
+}
+
+.modalTitle {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.modalSub {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.tab {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+}
+
+.tabActive {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.modalBody {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 18px 20px;
+  font-size: 12px;
+}
+
+.detailSection {
+  margin-bottom: 16px;
+}
+
+.detailSectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 6px;
+}
+
+.detailRow {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--separator);
+}
+
+.detailRow:last-child {
+  border-bottom: none;
+}
+
+.detailLabel {
+  color: var(--text-secondary);
+}
+
+.detailValue {
+  color: var(--text-primary);
+  word-break: break-word;
+  user-select: text;
+}
+
+.lyricRaw {
+  white-space: pre-wrap;
+  line-height: 1.8;
+  user-select: text;
+  color: var(--text-primary);
+}
+
+.emptyNote {
+  color: var(--text-secondary);
+  padding: 20px 0;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------- toasts */
+
+.toasts {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 90;
+  pointer-events: none;
+}
+
+.toast {
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--menu-bg);
+  backdrop-filter: blur(24px) saturate(1.7);
+  box-shadow: var(--glass-shadow), inset 0 0 0 1px var(--glass-stroke);
+  font-size: 12px;
+  color: var(--text-primary);
+  animation: toastIn 200ms var(--ease);
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

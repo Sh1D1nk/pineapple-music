@@ -1,0 +1,248 @@
+/**
+ * STFT / iSTFT —— 分轨推理的数学底座。
+ *
+ * 选择 n_fft = 4096、hop = 1024：4096/2+1 = 2049，正好是 UVR / MDX-Net 系 ONNX 模型
+ * 期望的频率维（dim_f = 2049），hop 1024 给出 4 倍重叠，Hann 窗满足 COLA，重建无损。
+ *
+ * 复数谱按 [frame][bin] 连续存放；喂给 ONNX 前再转置成 [1, C, 2049, T]，这是模型要的布局。
+ */
+
+export interface StftOptions {
+  nFft: number
+  hop: number
+}
+
+export const DEFAULT_STFT: StftOptions = { nFft: 4096, hop: 1024 }
+
+/** 周期 Hann 窗（w[0] = 0），COLA 条件下 sum(w²) 在三帧内恒为 1.5。 */
+export function hannWindow(n: number): Float32Array {
+  const w = new Float32Array(n)
+  for (let i = 0; i < n; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n)
+  return w
+}
+
+/** 原地 radix-2 FFT（长度必须是 2 的幂）。 */
+export function fftInPlace(re: Float32Array, im: Float32Array): void {
+  const n = re.length
+  if (n <= 1) return
+  if ((n & (n - 1)) !== 0) throw new Error(`FFT 长度必须是 2 的幂，收到 ${n}`)
+
+  // 位反转置换
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1
+    for (; j & bit; bit >>= 1) j ^= bit
+    j ^= bit
+    if (i < j) {
+      const tr = re[i]!
+      re[i] = re[j]!
+      re[j] = tr
+      const ti = im[i]!
+      im[i] = im[j]!
+      im[j] = ti
+    }
+  }
+
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len
+    const wRe = Math.cos(ang)
+    const wIm = Math.sin(ang)
+    for (let i = 0; i < n; i += len) {
+      let curRe = 1
+      let curIm = 0
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k
+        const b = a + len / 2
+        const xRe = re[b]! * curRe - im[b]! * curIm
+        const xIm = re[b]! * curIm + im[b]! * curRe
+        re[b] = re[a]! - xRe
+        im[b] = im[a]! - xIm
+        re[a] = re[a]! + xRe
+        im[a] = im[a]! + xIm
+        const nextRe = curRe * wRe - curIm * wIm
+        curIm = curRe * wIm + curIm * wRe
+        curRe = nextRe
+      }
+    }
+  }
+}
+
+/** 逆 FFT：共轭 → FFT → 共轭 / n。 */
+export function ifftInPlace(re: Float32Array, im: Float32Array): void {
+  const n = re.length
+  for (let i = 0; i < n; i++) im[i] = -im[i]!
+  fftInPlace(re, im)
+  const inv = 1 / n
+  for (let i = 0; i < n; i++) {
+    re[i] = re[i]! * inv
+    im[i] = -im[i]! * inv
+  }
+}
+
+export interface Spectrum {
+  /** [channel][frame * bins + bin] */
+  re: Float32Array[]
+  im: Float32Array[]
+  frames: number
+  bins: number
+}
+
+/**
+ * 从 `startSample` 开始取 `frames` 帧。第 f 帧覆盖 `startSample + f*hop - nFft/2` 到 +nFft，
+ * 越界部分补零 —— 等价于 librosa 的 center=True，保证首尾也能重建。
+ */
+export function stft(
+  channels: Float32Array[],
+  startSample: number,
+  frames: number,
+  opts: StftOptions = DEFAULT_STFT
+): Spectrum {
+  const { nFft, hop } = opts
+  const bins = nFft / 2 + 1
+  const win = hannWindow(nFft)
+  const out: Spectrum = {
+    re: channels.map(() => new Float32Array(frames * bins)),
+    im: channels.map(() => new Float32Array(frames * bins)),
+    frames,
+    bins
+  }
+  const re = new Float32Array(nFft)
+  const im = new Float32Array(nFft)
+  const length = channels[0]?.length ?? 0
+
+  for (let frame = 0; frame < frames; frame++) {
+    const origin = startSample + frame * hop - (nFft >> 1)
+    for (let ch = 0; ch < channels.length; ch++) {
+      const src = channels[ch]!
+      for (let i = 0; i < nFft; i++) {
+        const idx = origin + i
+        re[i] = idx >= 0 && idx < length ? src[idx]! * win[i]! : 0
+        im[i] = 0
+      }
+      fftInPlace(re, im)
+      const base = frame * bins
+      for (let b = 0; b < bins; b++) {
+        out.re[ch]![base + b] = re[b]!
+        out.im[ch]![base + b] = im[b]!
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * 把复数谱重建回时域并累加到 `target`，同时累加窗能量到 `norm`。
+ * mask 直接乘在谱上（实 mask），因此不需要相位重建以外的任何处理。
+ */
+export function istftAdd(
+  target: Float32Array[],
+  norm: Float32Array,
+  specRe: Float32Array[],
+  specIm: Float32Array[],
+  startSample: number,
+  frames: number,
+  opts: StftOptions = DEFAULT_STFT
+): void {
+  const { nFft, hop } = opts
+  const bins = nFft / 2 + 1
+  const win = hannWindow(nFft)
+  const re = new Float32Array(nFft)
+  const im = new Float32Array(nFft)
+  const length = target[0]?.length ?? 0
+
+  for (let frame = 0; frame < frames; frame++) {
+    const origin = startSample + frame * hop - (nFft >> 1)
+    const base = frame * bins
+    for (let ch = 0; ch < target.length; ch++) {
+      const srcRe = specRe[ch]
+      const srcIm = specIm[ch]
+      if (!srcRe || !srcIm) continue
+      // 共轭对称补全上半边
+      for (let b = 0; b < bins; b++) {
+        re[b] = srcRe[base + b]!
+        im[b] = srcIm[base + b]!
+      }
+      for (let b = 1; b < nFft / 2; b++) {
+        re[nFft - b] = re[b]!
+        im[nFft - b] = -im[b]!
+      }
+      ifftInPlace(re, im)
+      const dst = target[ch]!
+      for (let i = 0; i < nFft; i++) {
+        const idx = origin + i
+        if (idx < 0 || idx >= length) continue
+        dst[idx] = dst[idx]! + re[i]! * win[i]!
+      }
+    }
+    for (let i = 0; i < nFft; i++) {
+      const idx = origin + i
+      if (idx < 0 || idx >= length) continue
+      norm[idx] = norm[idx]! + win[i]! * win[i]!
+    }
+  }
+}
+
+/** 用上面累加的窗能量归一化，得到最终波形。 */
+export function applyNorm(target: Float32Array[], norm: Float32Array): void {
+  for (const channel of target) {
+    for (let i = 0; i < channel.length; i++) {
+      const n = norm[i]!
+      if (n > 1e-6) channel[i] = channel[i]! / n
+    }
+  }
+}
+
+/** 每 `windowSec` 一个采样点的 RMS 包络，归一到 0..1。用于人声乐句检测。 */
+export function rmsCurve(samples: Float32Array, sampleRate: number, windowSec = 0.1): number[] {
+  const step = Math.max(1, Math.round(sampleRate * windowSec))
+  const out: number[] = []
+  let peak = 0
+  for (let i = 0; i < samples.length; i += step) {
+    let sum = 0
+    const end = Math.min(samples.length, i + step)
+    for (let k = i; k < end; k++) sum += samples[k]! * samples[k]!
+    const rms = Math.sqrt(sum / Math.max(1, end - i))
+    out.push(rms)
+    if (rms > peak) peak = rms
+  }
+  if (peak > 0) for (let i = 0; i < out.length; i++) out[i] = out[i]! / peak
+  return out
+}
+
+/**
+ * 从人声能量曲线找「有人在唱」的乐句：阈值 + 最短时长 + 合并短间隔。
+ * 规划器拿它来挑「人声退出点」。
+ */
+export function detectPhrases(
+  curve: number[],
+  windowSec: number,
+  offsetSec = 0,
+  threshold = 0.12,
+  minGapSec = 0.45,
+  minPhraseSec = 0.6
+): { start: number; end: number }[] {
+  const phrases: { start: number; end: number }[] = []
+  let start = -1
+  for (let i = 0; i < curve.length; i++) {
+    const loud = curve[i]! > threshold
+    if (loud && start < 0) start = i
+    if (!loud && start >= 0) {
+      const from = offsetSec + start * windowSec
+      const to = offsetSec + i * windowSec
+      if (to - from >= minPhraseSec) phrases.push({ start: from, end: to })
+      start = -1
+    }
+  }
+  if (start >= 0) {
+    const from = offsetSec + start * windowSec
+    const to = offsetSec + curve.length * windowSec
+    if (to - from >= minPhraseSec) phrases.push({ start: from, end: to })
+  }
+  // 合并间隔很小的相邻乐句，避免规划器在换气处误判停顿
+  const merged: { start: number; end: number }[] = []
+  for (const phrase of phrases) {
+    const last = merged[merged.length - 1]
+    if (last && phrase.start - last.end < minGapSec) last.end = phrase.end
+    else merged.push({ ...phrase })
+  }
+  return merged
+}

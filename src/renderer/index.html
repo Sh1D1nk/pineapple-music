@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Pineapple Music</title>
+    <link rel="icon" href="data:," />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+        script-src 'self' blob: 'wasm-unsafe-eval';
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob: amcover:;
+        media-src 'self' blob: data: amsong:;
+        font-src 'self' data:;
+        connect-src 'self' ws: wss: data: blob: amcover: amsong:;
+        worker-src 'self' blob:;
+        child-src 'self' blob:"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

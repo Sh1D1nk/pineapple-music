@@ -1,0 +1,411 @@
+/* The bar starts to the right of the sidebar: when it spanned the full width its
+   transparent box sat on top of the sidebar's search field and swallowed every
+   click there. */
+.bar {
+  position: absolute;
+  top: 8px;
+  left: calc(var(--sidebar-w) + 8px);
+  right: 0;
+  height: 48px;
+  /* 四列：传输 / 音量 / 正在播放 / 右侧面板钮。用 grid 而不是 flex，
+     这样无论窗口多宽，最右侧的歌词与待播按钮都贴住右边距，不会被挤出可视区。 */
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding-right: 150px;
+  pointer-events: none;
+}
+
+/* 只有背后这条透明带子是窗口拖拽区；所有胶囊都在它上面，正常收事件 */
+.dragStrip {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: auto;
+  -webkit-app-region: drag;
+}
+
+.bar > *:not(.dragStrip) {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  border-radius: 999px;
+  padding: 0 8px;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+/* 1px light rim + a soft top sheen, drawn on top of the glass so the capsules
+   still read as glass when the refraction is off (blur / off tier). */
+.group::after,
+.nowPlaying::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px var(--glass-stroke), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  opacity: 0.9;
+}
+
+.iconButton {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  position: relative;
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.iconButton:hover {
+  background: var(--hover);
+}
+
+.iconButton:active {
+  transform: scale(0.94);
+}
+
+.iconButton.on {
+  color: var(--accent);
+}
+
+.playButton {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  transition: transform var(--dur-fast) cubic-bezier(0.34, 1.4, 0.64, 1), background var(--dur-fast) var(--ease);
+}
+
+.playButton:hover {
+  background: var(--hover);
+}
+
+.playButton:active {
+  transform: scale(0.94);
+}
+
+.badge {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  background: var(--bg-content);
+  border-radius: 999px;
+  width: 9px;
+  height: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --------------------------------------------------------------- volume */
+
+.volume {
+  width: 150px;
+  padding: 0 10px;
+  gap: 8px;
+}
+
+.volumeIcon {
+  color: var(--text-secondary);
+  flex: 0 0 auto;
+}
+
+.slider {
+  position: relative;
+  flex: 1 1 auto;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.sliderTrack {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--track);
+  overflow: visible;
+}
+
+.sliderFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: var(--text-primary);
+}
+
+.sliderThumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.slider:hover .sliderThumb {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* --------------------------------------------------------------- now playing */
+
+.nowPlaying {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 520px;
+  justify-self: center;
+  height: 48px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px 0 4px;
+  overflow: hidden;
+  cursor: default;
+}
+
+.coverWrap {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  margin-left: 3px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+
+/* Everything that reacts to a click has to leave the window drag region, or the
+   compositor swallows the event before React sees it. */
+.meta,
+.progressArea,
+.times,
+.slider,
+.volumeIcon,
+.playButton,
+.iconButton,
+.roundButton,
+.searchField {
+  -webkit-app-region: no-drag;
+}
+
+.coverOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.coverWrap:hover .coverOverlay {
+  opacity: 1;
+}
+
+.meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  padding: 4px 8px 6px;
+  border-radius: 10px;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.meta:hover {
+  background: var(--hover);
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+.subtitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  min-width: 0;
+}
+
+.titleButton {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.link {
+  min-width: 0;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 0 2px;
+  transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+
+.link:hover {
+  color: var(--text-primary);
+  background: var(--hover);
+}
+
+.dash {
+  opacity: 0.5;
+}
+
+.emptyNow {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.progressArea {
+  position: absolute;
+  left: 50px;
+  right: 18px;
+  bottom: 5px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+}
+
+.progressTrack {
+  position: relative;
+  flex: 1 1 auto;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  transition: height var(--dur) var(--ease);
+  cursor: pointer;
+}
+
+.nowPlaying:hover .progressTrack,
+.progressTrack.dragging {
+  height: 4px;
+}
+
+.progressFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: var(--text-primary);
+}
+
+.progressHandle {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--bg-content);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 20%, transparent), 0 1px 4px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform var(--dur) var(--ease);
+}
+
+.nowPlaying:hover .progressHandle,
+.progressTrack.dragging .progressHandle {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.times {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+  pointer-events: none;
+}
+
+.nowPlaying:hover .times {
+  opacity: 1;
+}
+
+.panelGroup {
+  gap: 4px;
+  padding: 0 4px;
+  justify-self: end;
+}
+
+.roundButton {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--text-primary);
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.roundButton:hover {
+  background: var(--hover);
+  transform: scale(1.05);
+}
+
+.roundButton:active {
+  transform: scale(0.95);
+}
+
+.roundButton.active {
+  background: var(--selected);
+  color: var(--accent);
+}
+
+.automixChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--accent);
+  padding-left: 6px;
+}

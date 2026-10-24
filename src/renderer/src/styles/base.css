@@ -1,0 +1,349 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-content);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  cursor: default;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: default;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ---------------------------------------------------------------- scrollbars */
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-primary) 30%, transparent);
+  background-clip: content-box;
+}
+
+/* ---------------------------------------------------------------- glass */
+
+.glass {
+  position: relative;
+  background: var(--glass-tint);
+  backdrop-filter: var(--hyalite, blur(18px) saturate(1.45));
+  -webkit-backdrop-filter: var(--hyalite, blur(18px) saturate(1.45));
+  box-shadow:
+    var(--glass-shadow),
+    var(--hyalite-edge, none),
+    inset 0 0 0 1px var(--glass-stroke);
+  border-radius: var(--radius-panel);
+}
+
+[data-glass='lite'] .glass {
+  backdrop-filter: blur(22px) saturate(1.7);
+  -webkit-backdrop-filter: blur(22px) saturate(1.7);
+}
+
+[data-glass='off'] .glass {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: color-mix(in srgb, var(--bg-content) 82%, transparent);
+}
+
+/* ---------------------------------------------------------------- shell */
+
+.app {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg-content);
+}
+
+.contentLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transition: padding-right var(--dur-panel) var(--ease-panel);
+}
+
+.contentScroll {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: 72px;
+  padding-bottom: 24px;
+  padding-left: calc(var(--sidebar-w) + 24px);
+  padding-right: 24px;
+  transition: padding-right var(--dur-panel) var(--ease-panel);
+  scrollbar-gutter: stable;
+}
+
+.contentScroll.withQueue {
+  padding-right: calc(var(--queue-w) + 16px);
+}
+
+/* Fade the content out under the floating glass instead of letting text collide with it. */
+/* A narrow fade right under the glass, so text does not collide with the bar's edge while the
+   content behind the bar itself stays visible and refracted. */
+.scrollEdgeTop {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  right: 0;
+  height: 32px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, var(--bg-content) 30%, transparent 100%);
+  z-index: 2;
+}
+
+.scrollEdgeLeft {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--sidebar-w) + 2px);
+  width: 26px;
+  pointer-events: none;
+  background: linear-gradient(to right, var(--bg-content) 20%, transparent 100%);
+  z-index: 2;
+}
+
+.floatLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.floatLayer > * {
+  pointer-events: auto;
+}
+
+.overlayLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.overlayLayer > * {
+  pointer-events: auto;
+}
+
+.dragRegion {
+  -webkit-app-region: drag;
+}
+
+.noDrag,
+.dragRegion button,
+.dragRegion input {
+  -webkit-app-region: no-drag;
+}
+
+/* ---------------------------------------------------------------- typography helpers */
+
+.pageTitle {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  margin: 0;
+}
+
+.pageSubtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+}
+
+.sectionTitle {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.2px;
+}
+
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- 视图切换动画 */
+
+/* 旧界面整体淡出、新界面淡入；两张快照都由 View Transitions 生成，不额外占 DOM。 */
+/* 过渡快照层默认会吃掉点击，必须显式让开，否则动画那 260ms 里什么都点不动。 */
+::view-transition,
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+  pointer-events: none;
+}
+
+::view-transition-old(root) {
+  animation: vtFadeOut 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+::view-transition-new(root) {
+  animation: vtFadeIn 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+/* 被点中的封面：从网格里的小图长到详情页大图，弹性曲线让它略微过冲再回落。 */
+::view-transition-group(album-cover) {
+  animation-duration: 560ms;
+  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+::view-transition-old(album-cover) {
+  animation: vtFadeOut 160ms ease both;
+}
+
+::view-transition-new(album-cover) {
+  animation: vtCoverIn 560ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes vtFadeOut {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vtFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.994);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes vtCoverIn {
+  from {
+    opacity: 0.35;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ---------------------------------------------------------------- 主导航方向过渡 */
+
+/* 切栏目时内容整体「滚过去」：向上切（歌曲→最近添加）时新内容从下方推入，
+   向下切时从上方落下。配合侧栏滑动的高亮块，形成一条连续的滚动路径。 */
+.viewSwap {
+  will-change: transform, opacity;
+}
+
+.viewSwapUp {
+  animation: viewRollUp 0.44s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.viewSwapDown {
+  animation: viewRollDown 0.44s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes viewRollUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 34px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes viewRollDown {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -34px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* View Transitions 的快照不能被入场动画干扰：拍快照时把页内动画全部停掉 */
+html[data-vt='1'] .page,
+html[data-vt='1'] .card,
+html[data-vt='1'] .viewSwap {
+  animation: none !important;
+}
+
+/* 歌词高光：把 --amll-word-bright 接到 AMLL 的渐变 mask 透明度上 */
+.amll-lyric-player .FmKaba_lyricLine.FmKaba_gradientMask {
+  --bright-mask-alpha: var(--amll-word-bright, 1) !important;
+}
