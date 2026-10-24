@@ -87,6 +87,15 @@ export function LyricsPanel(): JSX.Element {
               fontSize={28 * settings.lyricFontScale}
               weight={settings.lyricWeight}
               highlight={settings.lyricHighlight}
+              blur={settings.lyricBlur}
+              scale={settings.lyricScale}
+              wordFade={settings.wordFade}
+              hidePassed={settings.hidePassed}
+              fontFamily={
+                settings.lyricFont === 'pingfang'
+                  ? '"PingFang SC","Microsoft YaHei",system-ui,sans-serif'
+                  : 'system-ui,"Segoe UI",sans-serif'
+              }
               alignPosition={0.5}
               onSeek={(seconds) => seek(seconds)}
               color="#ffffff"

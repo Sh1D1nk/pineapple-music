@@ -536,6 +536,12 @@ export function SettingsView(): JSX.Element {
         <Row label="性能模式" hint="降低背景分辨率与帧率，并关闭歌词模糊与缩放">
           <Switch value={settings.bgPerf} onChange={(value) => void update({ bgPerf: value })} />
         </Row>
+        <Row label="自适应画质" hint="帧率偏低时自动下调背景渲染精度，帧率恢复后缓慢回升">
+          <Switch
+            value={settings.adaptiveQuality}
+            onChange={(value) => void update({ adaptiveQuality: value })}
+          />
+        </Row>
       </section>
 
       <section className={styles.section}>

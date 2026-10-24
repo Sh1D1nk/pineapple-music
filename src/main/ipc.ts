@@ -107,7 +107,7 @@ export function registerIpc(deps: Deps): void {
   ipcMain.handle('lyrics/get', async (_e, songId: string): Promise<LyricsPayload | null> => {
     const song = library.get(songId)
     if (!song) return null
-    return lyrics.get(song, settings.get().lyricsPriority)
+    return lyrics.get(song, settings.get().lyricsPriority, settings.get().lyricAutoFallback)
   })
 
   ipcMain.handle(

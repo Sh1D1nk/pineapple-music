@@ -41,6 +41,8 @@ export function FullscreenPlayer(): JSX.Element {
   /** 上一首/下一首/播放的按压动画（对齐插件的 saPushL/R/C） */
   const [push, setPush] = useState<'l' | 'r' | 'c' | null>(null)
   const [fpsValue, setFps] = useState(0)
+  /** 自适应画质对渲染精度的缩放系数（1 = 用户设定值，0.2 = 最低） */
+  const [adaptiveScale, setAdaptiveScale] = useState(1)
   const closeRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (open) {
@@ -118,9 +120,10 @@ export function FullscreenPlayer(): JSX.Element {
     })
   }
 
-  // 实时帧率（插件右上角的 FPS 指示）
+  // 实时帧率（插件右上角的 FPS 指示）。
+  // 同时作为「自适应画质」的输入：低帧时自动下调背景渲染精度，回升后缓慢恢复。
   useEffect(() => {
-    if (!settings.showFps) return undefined
+    if (!settings.showFps && !settings.adaptiveQuality) return undefined
     let raf = 0
     let last = performance.now()
     let frames = 0
@@ -130,7 +133,16 @@ export function FullscreenPlayer(): JSX.Element {
       last = now
       frames += 1
       if (acc >= 500) {
-        setFps(Math.round((frames * 1000) / acc))
+        const value = Math.round((frames * 1000) / acc)
+        setFps(value)
+        if (settings.adaptiveQuality) {
+          setAdaptiveScale((prev) => {
+            // 连续低帧就降精度；帧率恢复后缓慢回升，避免来回抖动
+            if (value < 24) return Math.max(0.2, prev - 0.1)
+            if (value > 50) return Math.min(1, prev + 0.05)
+            return prev
+          })
+        }
         acc = 0
         frames = 0
       }
@@ -138,7 +150,7 @@ export function FullscreenPlayer(): JSX.Element {
     }
     raf = window.requestAnimationFrame(loop)
     return () => window.cancelAnimationFrame(raf)
-  }, [settings.showFps])
+  }, [settings.showFps, settings.adaptiveQuality])
 
   const seekFrom = (clientX: number): void => {
     const el = trackRef.current
@@ -160,10 +172,12 @@ export function FullscreenPlayer(): JSX.Element {
           <BackgroundRender
             album={albumArt}
             playing={playback.playing}
-            fps={settings.bgPerf ? 15 : settings.bgFps}
+            fps={
+              settings.bgPerf ? 15 : Math.max(10, Math.round(settings.bgFps * adaptiveScale))
+            }
             flowSpeed={settings.bgFlowSpeed}
             hasLyric={hasLyrics}
-            renderScale={settings.bgRenderScale}
+            renderScale={Math.max(0.2, settings.bgRenderScale * adaptiveScale)}
             staticMode={settings.bgPerf || settings.bgFps === 0}
             style={{ width: '100%', height: '100%' }}
           />

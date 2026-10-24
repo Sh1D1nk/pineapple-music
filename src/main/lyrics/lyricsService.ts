@@ -12,6 +12,7 @@ import type { LyricLineData, LyricSourceKind, LyricsPayload, SongMeta } from '@s
 import type { EmbeddedLyrics } from '../library/tags'
 import { decodeTextBuffer } from '../library/encoding'
 import { lyricsCacheDir } from '../paths'
+import { effectiveSources, lyricsCacheStamp } from './sourcePolicy'
 
 const SIDECAR_ORDER: { ext: string; kind: LyricSourceKind }[] = [
   { ext: '.lrc', kind: 'lrc' },
@@ -224,15 +225,24 @@ export class LyricsService {
 
   async get(
     song: SongMeta,
-    priority: ('sidecar' | 'embedded' | 'text')[]
+    priority: ('sidecar' | 'embedded' | 'text')[],
+    autoFallback = true
   ): Promise<LyricsPayload> {
     const sidecar = priority[0] === 'sidecar' ? this.findSidecar(song) : null
     const sidecarStat = sidecar ? await fs.stat(sidecar.path).catch(() => null) : null
-    const stamp = `${sidecar ? `${sidecar.path}:${sidecarStat?.mtimeMs ?? 0}` : 'none'}|${song.mtimeMs}|${priority.join(',')}`
+    const stamp = lyricsCacheStamp({
+      sidecarPath: sidecar?.path ?? null,
+      sidecarMtimeMs: sidecarStat?.mtimeMs ?? 0,
+      songMtimeMs: song.mtimeMs,
+      priority,
+      autoFallback
+    })
     const cached = this.cache.get(song.id)
     if (cached && cached.stamp === stamp) return cached.payload
 
-    const payload = await this.load(song, priority)
+    // 自动回退关闭时只尝试第一个来源，取不到就返回空（而不是悄悄换源）
+    const effective = effectiveSources(priority, autoFallback)
+    const payload = await this.load(song, effective)
     this.cache.set(song.id, { payload, stamp })
     return payload
   }
