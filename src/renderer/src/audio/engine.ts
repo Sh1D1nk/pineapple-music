@@ -1,6 +1,7 @@
 import type { SongMeta } from '@shared/types'
 import { songUrl } from '../bridge'
 import { integratedPosition, rateAt, gainAt, type TransitionPlan } from '@shared/transition/planner'
+import { ENDED_GUARD_MS, shouldAcceptEnded } from './endedGuard'
 
 export type EnginePhase = 'idle' | 'loading' | 'playing' | 'paused' | 'bridge' | 'preparing'
 export type DeckId = 'A' | 'B'
@@ -198,7 +199,7 @@ export class AudioEngine {
     const deck = this.decks![this.active]
     this.currentSong = song
     this.endedFired = false
-    this.endedGuardUntil = performance.now() + 900
+    this.endedGuardUntil = performance.now() + ENDED_GUARD_MS
     this.phase = 'loading'
     this.loadedPosition = opts.position ?? 0
     deck.el.src = songUrl(song.id)
@@ -238,6 +239,9 @@ export class AudioEngine {
     const deck = this.decks![this.active]
     if (!deck.el.src) return
     this.phase = 'playing'
+    // 从暂停恢复也算一次新的播放尝试：必须允许再次处理 ended。
+    // 否则「播完时处于暂停态」会把 endedFired 卡在 true，恢复后再播完就不换下一首了。
+    this.endedFired = false
     try {
       await deck.el.play()
     } catch (err) {
@@ -333,6 +337,11 @@ export class AudioEngine {
     }
     this.active = nextId
     this.currentSong = song
+    // 换到新 deck 是一次新的播放：必须重置 ended 标记与保护窗，
+    // 否则第一首播完自动切到第二首后，第二首的 ended 会被 alreadyFired 拦截，
+    // 表现为「播完一首就停住，不再自动下一首」。
+    this.endedFired = false
+    this.endedGuardUntil = performance.now() + ENDED_GUARD_MS
     this.phase = 'playing'
     this.emit()
     pauseTimers[from.id] = window.setTimeout(() => {
@@ -553,12 +562,18 @@ export class AudioEngine {
   private handleEnded(id: DeckId): void {
     if (id !== this.active) return
     if (this.bridge && !this.bridge.finished) return
+    const deck = this.decks?.[id]
     // 切歌竞态：上一首的 'ended' 事件可能排在 load() 之后才派发，
     // 那时 phase 已经是 playing，会把刚点开的歌误判成播完并跳到下一首。
-    if (performance.now() < this.endedGuardUntil) return
-    const deck = this.decks?.[id]
-    if (deck && !deck.el.ended) return
-    if (this.endedFired) return
+    //
+    // 判据用媒体元素的 ended 标志（load() 会把它置回 false，所以旧资源的
+    // 迟到事件必然被识别为 stale），而不是纯时间窗 —— 时间窗会连带吞掉
+    // 「刚开播就拖到结尾」这种真实播完事件，导致播完不自动下一首。
+    if (!shouldAcceptEnded({
+      withinGuard: performance.now() < this.endedGuardUntil,
+      elementEnded: Boolean(deck?.el.ended),
+      alreadyFired: this.endedFired
+    })) return
     this.endedFired = true
     if (this.phase === 'playing') {
       this.phase = 'paused'

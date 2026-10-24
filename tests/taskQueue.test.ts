@@ -3,6 +3,18 @@ import { TaskQueue } from '../src/main/media/taskQueue'
 
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
+/**
+ * 轮询等待条件成立，而不是死等固定时长。
+ * 固定 sleep 在机器负载高时（例如同时跑 50+ 用例）会不够用，导致偶发失败。
+ */
+const waitUntil = async (predicate: () => boolean, timeoutMs = 4000): Promise<void> => {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    await wait(10)
+  }
+}
+
 describe('TaskQueue', () => {
   it('runs in priority order', async () => {
     const order: string[] = []
@@ -16,7 +28,7 @@ describe('TaskQueue', () => {
     queue.add('c', 'analyze', 30)
     queue.add('a', 'analyze', 10)
     queue.add('b', 'analyze', 20)
-    await wait(80)
+    await waitUntil(() => order.length === 3)
     expect(order).toEqual(['a', 'b', 'c'])
   })
 
@@ -33,7 +45,7 @@ describe('TaskQueue', () => {
     queue.add('b', 'analyze', 200)
     queue.add('c', 'analyze', 300)
     queue.setOrder(['c', 'b', 'a'])
-    await wait(120)
+    await waitUntil(() => order.length === 3)
     expect(order).toEqual(['c', 'b', 'a'])
     expect(order.filter((id) => id === 'a')).toHaveLength(1)
   })
@@ -54,7 +66,7 @@ describe('TaskQueue', () => {
     queue.pause()
     expect(queue.stats().running).toBe(0)
     queue.resume()
-    await wait(120)
+    await waitUntil(() => queue.stats().done === 6)
     expect(peak).toBeLessThanOrEqual(2)
     expect(queue.stats().done).toBe(6)
   })
