@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.2.0 - 2026-10-24
+
+新增：
+- **收藏（F-1）**：歌曲右键「收藏 / 取消收藏」、专辑右键「收藏整张专辑」、收藏卡片右上角星标；
+  侧边栏新增「收藏」入口，收藏页分「专辑」「歌曲」两段。
+  数据落在 `%APPDATA%/Pineapple Music/favorites.json`，只存歌曲 id 与专辑 key，
+  曲库变动后失效条目自动消失。新增 6 例单元测试（脏数据规整、切换幂等、读写回环、损坏文件兜底）。
+
+修复：
+- **B-1 歌词面板看着像一张封面**：面板背景既没有滤镜也没有压暗层，高饱和封面铺满 380px 面板，
+  白字被冲淡、非当前行几乎消失。现在滤镜直接命中 AMLL 的 canvas（给包裹层加 filter 无效，实测 computed 仍是 none），
+  并补 `.lyricsTint` 压暗层；无封面时回退底色同步压暗，`bgType` / `bgEnabled` 也真正接到面板。
+- **B-3 一次切歌触发多次**：`crossfadeTo()` 先 `await play()` 才翻转 `active`，
+  用户恰在歌曲尾部点「下一首」时，旧 deck 的 `ended` 会被当成「新歌播完了」再切一首。
+  现在先翻 active、把旧 deck 标记为 retiring，它的 ended 一律忽略；
+  队列推进抽成 `lib/queueNav.ts` 纯函数，新增 `tests/engineSwitchRace.test.ts` 与 `tests/queueNav.test.ts`。
+- **B-8 顶栏歌词按钮开错界面**：点击开的是全屏，`aria-pressed` 却绑在侧边面板上。
+  改为 `setLyricsOpen` 开关、`title` 改成「歌词面板 (Ctrl+L)」，并补上全屏页右上角缺失的歌词入口。
+- **B-2 面板与全屏互斥**：侧边面板在 floatLayer（z-index 5），全屏页在 overlayLayer（40），
+  同时打开只会让面板被整页盖住 —— 现在开一个必关另一个。
+- **B-6 卡片按钮消失 / 过白**：`.cardPlay` 是白底 + `opacity: 0` 等 hover 才出现，深色主题下白字白底等于消失。
+  改成深色玻璃态常驻可见（36×36，热区 ≥32），补 `:focus-visible` 焦点环，`.cardMore` 同步。
+- **版本脚本**：`bump-version.mjs` 把整份旧日志当成 header 再 replace，新条目会被追加到文件末尾；已修正。
+
+界面：
+- **B-4 专辑页背景**：新增裁剪封面背景层（`cover` + 中心对齐 + 模糊压暗 + 底部渐隐），
+  `pointer-events: none`，不参与 View Transition。
+- **B-5 添加文件夹入设置**：侧边栏底部只留「设置」；设置页「资料库」区块可添加 / 列出 / 移除，并 toast 提示数量。
+- **B-7 分轨模型说明**：设置页常驻展示用途 / 格式 / 不兼容 / 存放路径 / 具体来源（3 个可点模型页）/ 获取步骤 / 状态反馈；
+  导入时用 `probeModel()` 校验签名，失败显示「期望 vs 实际」并删除不兼容文件。
+- **U-1 侧边栏分隔**：新增渐变分隔线 + 柔光投影与可见的拖拽把手，浅深主题各有对应 token。
+
+验收：`npm run typecheck` 全绿；`npm test` 75 例全通过（原 62 例）。
+
 ## 1.1.1 - 2026-10-24
 
 修复（专家复核阶段发现）：

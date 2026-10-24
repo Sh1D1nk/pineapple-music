@@ -19,7 +19,8 @@ const note = noteIndex >= 0 ? (args[noteIndex + 1] ?? '') : ''
 
 const pkgPath = join(root, 'package.json')
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
-const [major, minor, patch] = String(pkg.version).split('.').map((n) => Number(n) || 0)
+const currentVersion = String(pkg.version)
+const [major, minor, patch] = currentVersion.split('.').map((n) => Number(n) || 0)
 const next =
   type === 'major'
     ? `${major + 1}.0.0`
@@ -43,11 +44,10 @@ if (!summary) {
 const changelogPath = join(root, 'CHANGELOG.md')
 const date = new Date().toISOString().slice(0, 10)
 const entry = `## ${next} - ${date}\n\n- ${summary}\n`
-const previous = existsSync(changelogPath) ? readFileSync(changelogPath, 'utf8') : '# Changelog\n\n'
-const header = previous.startsWith('# Changelog')
-  ? previous
-  : '# Changelog\n\n'
-const body = previous.replace(header, '')
-writeFileSync(changelogPath, `${header}${entry}${body}`)
+const previous = existsSync(changelogPath) ? readFileSync(changelogPath, 'utf8') : ''
+// 只剥掉标题行，不要把整份旧日志当成 header —— 否则旧内容会被 replace 掉，
+// 新条目反而被追加到文件末尾（v1.2.0 实际踩过）。
+const body = previous.replace(/^#\s*Changelog[^\n]*\n+/i, '')
+writeFileSync(changelogPath, `# Changelog\n\n${entry}\n${body}`)
 
-console.log(`版本号 ${pkg.version} → ${next}；CHANGELOG 已更新`)
+console.log(`版本号 ${currentVersion} → ${next}；CHANGELOG 已更新`)
