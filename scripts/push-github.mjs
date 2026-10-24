@@ -49,11 +49,13 @@ async function call(method, path, body) {
 // 0) 空仓库不允许直接建 blob：先用 Contents API 放一个占位文件，把仓库点着
 const repoInfo = await call('GET', `/repos/${owner}/${name}`)
 if (repoInfo.size === 0) {
+ try {
   await call('PUT', `/repos/${owner}/${name}/contents/README.md`, {
     message: 'chore: init',
     content: Buffer.from('# Pineapple Music\n\n(该占位文件会被完整历史覆盖)\n').toString('base64')
   })
   console.log('空仓库：已用 Contents API 建立首个提交')
+ } catch (err) { console.log('跳过初始化（仓库已有内容）') }
 }
 
 // 1) 收集所有 commit 需要用到的 blob
