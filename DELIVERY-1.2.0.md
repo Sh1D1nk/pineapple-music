@@ -151,8 +151,15 @@
 1. **B-2 侧边栏迷你歌词控件**：按你的选择不新造。若之后要做，建议独立立项（涉及侧边栏布局与歌词实例复用）。
 2. **B-7 模型兼容性**：设置页已如实写明「UVR 官方多数 MDX-Net ONNX 导出是 `[1,4,3072,256]`，本应用会拒绝」。
    如果你希望直接支持 3072 频点，需要改 `stemService` 的 STFT 参数（属协议级改动，建议单独一轮）。
-3. **打包与推送**：按你的选择本轮只做到「编译 + 单测 + 验收截图」，没有出 NSIS 安装包、没有推 GitHub。
-   改动目前**未提交**（工作区干净可审）。
+3. **打包与推送：已完成**（2026-10-25）
+   - 安装包：`dist-v120/Pineapple Music-1.2.0-setup.exe`（163 MB，x64 NSIS，SHA256 `33ce21a6…5bc8`）
+   - 打包后冒烟：`node scripts/probe-packaged.mjs dist-v120` → 10 首歌入库 / 9 张封面 / Hyalite 0.5.0
+   - 仓库：<https://github.com/Sh1D1nk/pineapple-music>（`main` 已更新，tag `v1.2.0`）
+   - Release：<https://github.com/Sh1D1nk/pineapple-music/releases/tag/v1.2.0>
+     ，资产 `Pineapple.Music-1.2.0-setup.exe`（163 MB，state=uploaded）
+   - ⚠️ 注意：`scripts/push-github.mjs` 是用 GitHub API **从本地历史逐 commit 重建**远端，
+     远端 sha 与本地不同（远端 `6e0681f` / 本地 `d73f63a`）。不要对远端 `git pull`，
+     下次发布仍走 `node scripts/push-github.mjs`。
 4. **`screenshots/08*`**：这两张偶发捕到合成层重绘中的中间态（顶栏缺失、底部暗块），
    同一时刻其余 30+ 张截图正常，DOM 探针也确认 `fullscreen=false`、顶栏 rect 正常 —— 属截图时机问题，
    不是功能缺陷，未改代码。
@@ -166,4 +173,11 @@ npm run typecheck     # 全绿
 npm test              # 75 passed
 npm run verify        # 36 张截图，渲染进程 0 报错
 node tmp-qa-120.mjs   # 26 项 DOM 断言（一次性探针，gitignored）
+
+# 打包（输出目录必须每次换新，否则旧目录删不掉）
+npm run compile && npx electron-builder --win nsis -c.directories.output=dist-v120
+node scripts/probe-packaged.mjs dist-v120   # 打包后冒烟
+
+# 发布（github.com 直连被挡，走 API 重建）
+node scripts/push-github.mjs
 ```

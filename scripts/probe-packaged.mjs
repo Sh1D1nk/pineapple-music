@@ -4,7 +4,9 @@ const root = resolve('.')
 const env = { ...process.env }
 delete env.ELECTRON_RUN_AS_NODE
 delete env.NODE_OPTIONS
-const exe = join(root, 'release/win-unpacked/本地音乐.exe')
+// 用法：node scripts/probe-packaged.mjs [dist-vXXX]（默认取最新的 dist-v* 目录）
+const outDir = process.argv[2] ?? 'dist-v120'
+const exe = join(root, outDir, 'win-unpacked', 'Pineapple Music.exe')
 const app = await electron.launch({
   executablePath: exe,
   args: [`--user-data-dir=${process.env.TEMP}/lm-pkg-${Date.now()}`],
