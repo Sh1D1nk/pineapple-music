@@ -3,7 +3,10 @@ out/
 dist/
 dist-*/
 release*/
-fixtures/
+fixtures/*
+# 这一个 191 字节的合成 mask 模型要进仓库：README 与 CHANGELOG 都引用它，
+# 而且它是「不居中频谱」之外的另一条签名样例。
+!fixtures/test-mask-035.onnx
 screenshots/
 *.log
 .DS_Store

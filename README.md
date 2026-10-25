@@ -4,7 +4,15 @@
 
 Electron + electron-vite + React 19 + TypeScript(strict) + Zustand，界面语言简体中文。
 
-![歌曲列表](screenshots/03-songs-light.png)
+![歌曲列表](docs/images/03-songs-light.png)
+
+> **开始前要知道的一件事**
+>
+> 旗舰级的 **AutoMix A / B 过渡**（人声先退、伴奏交叉）需要**分轨**，而分轨需要你自己提供一个
+> 兼容的 ONNX 模型 —— 应用不内置、也不转分发任何模型权重。没有模型时，AutoMix 会稳定地跑在
+> **C 级**（整曲节拍对齐 + 低频交换），播放本身完全不受影响。
+> 装好模型之后，应用会**自动在后台给当前曲目与下一首排队分轨**，不需要你手动操作。
+> 怎么挑模型、放在哪、怎么确认兼容，见 [第 11 节](#11-分轨stem-separation--onnx-推理)。
 
 ---
 
@@ -13,7 +21,7 @@ Electron + electron-vite + React 19 + TypeScript(strict) + Zustand，界面语�
 ```bash
 npm install            # 依赖安装（.npmrc 已预设 legacy-peer-deps 与 electron 镜像）
 npm run dev            # 开发模式，直接打开应用窗口
-npm run build          # 产出 Windows 安装包 dist/Pineapple Music-1.0.0-setup.exe
+npm run build          # 产出 Windows 安装包 dist/Pineapple Music-<版本>-setup.exe（当前 1.3.4）
 ```
 
 其它脚本：
@@ -23,7 +31,7 @@ npm run build          # 产出 Windows 安装包 dist/Pineapple Music-1.0.0-set
 | `npm run compile` | 只做 electron-vite 构建（out/main、out/preload、out/renderer） |
 | `npm run build:dir` | 只打包成免安装目录（dist/win-unpacked） |
 | `npm run fixtures` | 生成 10 个测试音频到 `fixtures/` |
-| `npm test` | vitest 单元测试（44 个用例） |
+| `npm test` | vitest 单元测试（83 个用例） |
 | `npm run typecheck` | 主进程 + 渲染进程 strict 类型检查 |
 | `npm run verify` | 构建后用 Playwright 驱动 Electron，跑完整截图清单并输出 `screenshots/report.json` |
 | `npm run rebuild:native` | 需要时用 `electron-builder install-app-deps` 重建原生模块 |
@@ -127,22 +135,22 @@ npm run build          # 产出 Windows 安装包 dist/Pineapple Music-1.0.0-set
 | A | 完整分轨：时变变速 + 拍点相位对齐 + 低频交换 + 响度匹配 | 同上 |
 | E | 同专辑连续曲目保持无缝 | 已实现 |
 
-**P2（分轨）按优先级被裁剪**：神经网络分轨需要 100–300 MB 权重，我无法在这个交付里附带可信的、许可清晰的模型，也不愿意用假的「人声轨」充数。因此：
+**分轨是 A / B 级的前置条件**：神经网络分轨需要外部模型权重，应用不内置、不转分发任何模型（许可与体积都因模型而异）。现在的状态是：
 
-- `StemService` 的窗口规划、缓存键、LRU、状态机、`vocalCurve` / 人声乐句提取都已就位；
-- 人声乐句现在由**歌词时间轴**推导（`phrasesFor()`），规划器据此选择人声退出的停顿点；
-- 没有分轨数据时，`planner` 明确输出 `level: 'C'` 并在 `notes` 里写明「分轨未就绪，整曲节拍对齐混音」；
-- 设置页与进度面板都如实显示「AutoMix 分轨：未安装模型」。
+- 分轨管线**已经完整可用**：`StemService` 负责解码 → 分块 STFT → ONNX 推理 → iSTFT 重建 → 落盘 → 缓存 LRU → 人声乐句提取；
+- 频谱**按模型签名自适应**：2049 频点走居中频谱（n_fft=4096），2048 频点走不居中（UVR MDX-Net 的标准设置），4096/4097 走 n_fft=8192；掩码按 ONNX 的 `[C][bins][frames]` 布局读取，取**第 0 通道**作为人声掩码；
+- **装好模型后自动排队**：切歌规划过渡时，若当前曲目与下一首还没有分轨，应用会自己把它们排进后台队列；
+- 没有分轨数据时，`planner` 明确输出 `level: 'C'` 并在 `notes` 里写明「分轨未就绪，整曲节拍对齐混音」；拍点不可靠时再降为 D 级。
 
-模型选型调研（若要把 A/B 级接上）：
+模型选型（**请自行确认权重许可**）：
 
 | 候选 | 许可 | 体积 | 说明 |
 | --- | --- | --- | --- |
-| Demucs v4 (htdemucs) ONNX 转换 | MIT（代码）/ 权重 CC-BY-NC 风险需自行确认 | 80–170 MB | 质量最好，两轨（vocals/no_vocals）导出即可；推理需要 STFT + overlap-add |
-| UVR MDX-Net 2-stem ONNX | 权重多为 MIT/CC-BY，需逐个模型确认 | 30–60 MB | 社区最常见的 ONNX 形态，输入 `[1,2,2049,T]`，CPU 上约 0.5–1× 实时 |
+| **UVR MDX-Net 2-stem ONNX**（推荐） | 权重多为 MIT/CC-BY，需逐个模型确认 | 30–70 MB | 社区最常见的形态。**认准频点数 2048 或 2049**（即 n_fft=4096）；`[1,4,3072,256]` 这类需要 n_fft=6144 的导出本应用跑不了 |
+| Demucs v4 (htdemucs) ONNX 转换 | MIT（代码）/ 权重许可需自行确认 | 80–170 MB | 质量最好，两轨（vocals/no_vocals）导出即可；推理需要 STFT + overlap-add |
 | Spleeter 2stems | MIT（代码）/ 权重 CC-BY-SA | 40 MB | 速度最快，质量最弱，适合兜底 |
 
-接入点：`src/main/media/` 增加一个 `stems.ts`（ONNX session + 分块推理 + 写 FLAC 人声轨），把 `vocalCurve` 填进 `SongMeta.stem`，规划器就会自动升到 B/A 级 —— 规划器与渲染端不需要改动。
+用哪个模型、放在哪、怎么确认兼容，见 [第 11 节](#11-分轨stem-separation--onnx-推理)。
 
 ---
 
@@ -155,7 +163,7 @@ npm test
 
 夹具覆盖：ID3v2.3（APIC + USLT + TCOM/TEXT/IPLS + 完整基础字段）、ID3v2.4（SYLT）、FLAC（PICTURE + LYRICS + 四个角色字段）、m4a（covr + ©lyr + ©wrt）、标准 LRC / 增强型逐字 LRC / 双语 LRC、声明 ISO-8859-1 实则 GBK 的 mp3 与 GBK 编码 .lrc、无标签「艺人 - 歌名.mp3」、以及 100 BPM 与 108 BPM 两首鼓点循环。
 
-44 个用例覆盖：标签映射与中文乱码修复、LRC/offset/双语/逐字解析、编码探测、节拍估计（合成点击轨 + 真实夹具解码）、响度与静音检测、TransitionPlanner 的 12 种场景（末句贴尾、前奏过长/过短、BPM 倍速、超限、速度不稳、gapless、响度匹配、相位误差）、任务队列的优先级/取消/重试。
+83 个用例覆盖：标签映射与中文乱码修复、LRC/offset/双语/逐字解析、编码探测、节拍估计（合成点击轨 + 真实夹具解码）、响度与静音检测、TransitionPlanner 的 12 种场景（末句贴尾、前奏过长/过短、BPM 倍速、超限、速度不稳、gapless、响度匹配、相位误差）、任务队列的优先级/取消/重试。
 
 真实跑出来的数字：
 
@@ -172,7 +180,8 @@ npm test
 
 ## 6. 已知限制
 
-- **分轨（AutoMix A/B 级）未包含模型**，见第 4 节。默认运行在 C/D 级。
+- **分轨（AutoMix A/B 级）不附带模型权重**，需自备兼容的 ONNX（见第 4、11 节）。没有模型时运行在 C/D 级。
+- **频点数需要 n_fft=6144 的模型暂不支持**（如 `[1,4,3072,256]`）：本应用的 FFT 只实现 radix-2，长度必须是 2 的幂。
 - **ape / wv**：能读标签，但能否播放取决于 ffmpeg 构建是否带 Monkey's Audio / WavPack 解码器；内置的 `ffmpeg-static` 通常包含，系统 ffmpeg 视构建而定。
 - **SMTC**：只做了系统媒体键（`globalShortcut` 的 MediaPlayPause/Next/Previous/Stop），没有接 Windows SMTC 会话（需要原生模块）。
 - 歌词的「音译」判定是启发式（日文假名 + 拉丁行 → 罗马音，其余 → 翻译），不是语言识别。
@@ -203,6 +212,8 @@ src/renderer/src/
 src/shared/               dsp（fft/tempo/loudness）、transition/planner（纯函数）、类型
 scripts/                  make-fixtures / verify（Playwright 截图）/ 诊断脚本
 tests/                    vitest
+docs/                     amll-plugin-port.md（插件移植映射）+ images/（README 用图）
+LICENSE                   AGPL-3.0-only 全文
 ```
 
 ---
@@ -228,7 +239,7 @@ tests/                    vitest
 
 ---
 
-## 10. 本轮修复对照（对齐 AMLL 插件原版）
+## 9. 本轮修复对照（对齐 AMLL 插件原版）
 
 参考实现：`soda-amll-lyrics/src/inject.js`（汽水音乐 AMLL 插件）的 `OVERLAY_CSS` 与 `sa-stage` DOM。
 
@@ -250,28 +261,32 @@ tests/                    vitest
 
 ---
 
-## 9. 截图
+## 10. 截图
 
-`screenshots/` 下为 1280×800 的浅色/深色成对截图（由 `npm run verify` 自动生成）：
+下表是 `npm run verify` 的**完整截图清单**（本地生成到 `screenshots/`，该目录不入库）。
+带 ✅ 的 10 张已提交到 `docs/images/`，在 GitHub 上可以直接看到；其余需要自己跑一次 `npm run verify` 才会出现在本地：
 
 | 文件 | 内容 |
 | --- | --- |
 | `01-empty-light` | 空状态 + 拖放提示 |
 | `02-recent-light` | 最近添加 |
-| `03-songs-light` / `16-songs-dark` | 歌曲虚拟列表 |
-| `04-albums-scrolled-*` | 专辑网格滚到顶栏玻璃下方 |
+| ✅ `03-songs-light` / `16-songs-dark` | 歌曲虚拟列表 |
+| ✅ `04-albums-scrolled-*` | 专辑网格滚到顶栏玻璃下方 |
 | `05-album-detail-light` / `20-album-detail-dark` | 专辑详情 |
 | `06-artists-light` / `21-artists-dark` | 艺人 |
 | `07-search-light` | 搜索结果（拼音 `qing` 命中「晴天」） |
 | `08b-topbar-closeup-light` / `16b-topbar-closeup-dark` | 顶栏胶囊近景（播放中） |
 | `09-lyrics-panel-light` / `17-lyrics-panel-dark` | 歌词面板（逐字高亮） |
 | `10-queue-panel-light` | 待播清单 |
-| `11/18-fullscreen-lyrics-*` | 全屏正在播放（有歌词） |
+| ✅ `11/18-fullscreen-lyrics-*` | 全屏正在播放（有歌词） |
 | `22-fullscreen-nolyrics-dark` | 全屏正在播放（无歌词） |
-| `12/23-context-menu-*` | 右键菜单 |
+| ✅ `12/23-context-menu-*` | 右键菜单 |
 | `13-song-info-light` | 歌曲信息弹窗 |
 | `14-settings-light` / `15-settings-dark` | 设置 |
-| `24-glass-full` / `25-glass-simplified` | 完整折射 vs 简化，同一屏内容 |
+| ✅ `24-glass-full` / `25-glass-simplified` | 完整折射 vs 简化，同一屏内容 |
+| ✅ `18b-lyrics-menu-dark` | 歌词页右键菜单（v1.3 移植） |
+| ✅ `18c-lyrics-settings-dark` | 歌词页设置窗（v1.3 移植） |
+| ✅ `29-cover-flow` / `30-cover-flow-moved` / `31-settings-groups` | 封面流与设置分组 |
 
 `report.json` 记录当次运行的分析结果、帧耗时、玻璃像素差与渲染进程报错。
 
@@ -283,11 +298,11 @@ tests/                    vitest
 
 **预期行为**
 
-1. 把一个两轨 ONNX 模型放进模型目录（设置 → 分轨模型 → 导入本地模型）。只接受频谱 mask 家族：输入 `[1, C, 2049, T]`（C=2 立体声实虚 / C=4 加单声道），输出同形状，前两通道当作 L/R mask。
-2. 设置页「开始分轨」把当前曲目与队列下一首入队；一次只跑一首，可暂停/继续/停止。
-3. 管线：ffmpeg 解码 → 分块 STFT(4096/1024, Hann, center) → 每 64 帧喂一次 ONNX → 用 mask 与 1−mask 分别 iSTFT 重建 → 写 `vocals.wav` / `instrumental.wav` → 从 vocals 算 50ms 能量曲线并检测人声乐句 → 写回 `song.stem`。
+1. 把一个两轨 ONNX 模型放进模型目录（设置 → 分轨模型 → 导入本地模型 / 打开模型目录）。接受频谱 mask 家族：输入 `[1, C, bins, T]`（C=2 单声道实虚 / C=4 立体声实虚），输出同形状，**第 0 通道即人声掩码**；`bins` 决定频谱口径：2049 居中、2048 不居中（MDX-Net 标准）、4096/4097 走 n_fft=8192。
+2. 分轨是**自动**的：切歌时若当前曲目与下一首缺分轨，会自动排进后台队列（一次只跑一首，可暂停/继续/停止）。也可以在设置页「当前曲目分轨」或歌曲右键菜单「生成分轨」手动触发。
+3. 管线：ffmpeg 解码 → 分块 STFT（按模型签名选 n_fft / hop / 是否居中；不居中时首尾各补 n_fft/2 个零，否则 Hann 窗会吃掉开头）→ 每块按模型固定帧数（常见 256）喂一次 ONNX → 掩码与 1−掩码分别 iSTFT 重建 → 写 `vocals.wav` / `instrumental.wav` → 从 vocals 算 50ms 能量曲线并检测人声乐句 → 写回 `song.stem`。
 4. 规划器读到 `stem.state === 'ready'` 后，过渡从 C 级升到 A 级（人声在停顿处退出、时变变速）或 B 级（不变速）。
-5. 运行时缺失、模型签名不符、帧数固定（如 dim_t=256）都会给出明确原因：固定 T 自动补零再截取，签名不符直接拒绝，绝不硬喂。
+5. 运行时缺失、模型签名不符、帧数固定（如 dim_t=256）都会给出明确原因：固定 T 自动补零再截取，签名不符直接拒绝并写明「频点数 X → 需要 n_fft=Y」，绝不硬喂。
 
 **实现范围**
 
@@ -302,7 +317,10 @@ tests/                    vitest
 
 **不做**：4-stem（鼓/贝斯）、GPU EP、实时分轨。
 
-**实测**（合成常量 mask 模型 `fixtures/test-mask-035.onnx`，仅用于验证管线）：24 秒歌曲 **4 秒**跑完（≈6× 实时），`vocalCurve` 480 点、`phrases` 1 段、状态 `ready`；单测验证重建误差 < 1e-3、mask 0.35 时人声/伴奏能量比 0.4–0.7。
+**实测**：
+
+- 合成常量 mask 模型 `fixtures/test-mask-035.onnx`（191 字节，随仓库入库，仅用于验证管线）：24 秒歌曲 **4 秒**跑完（≈6× 实时），`vocalCurve` 480 点、`phrases` 1 段、状态 `ready`；单测验证重建误差 < 1e-3、mask 0.35 时人声/伴奏能量比 0.4–0.7。
+- 真实模型（UVR MDX-Net，`[1,4,2048,256]`）：96 秒曲目的分轨跑通，人声轨 / 伴奏轨能量比 **0.05（-26 dB）** —— 人声模型在无人声素材上把人声轨压到几乎为零，说明掩码方向与读法都对；真实音频往返重建最大误差 **1e-4**。
 
 ---
 
@@ -320,10 +338,23 @@ tests/                    vitest
 
 ### 验证方式
 
-- `npm test`（49 个单测，含节拍/分轨/规划器）
+- `npm test`（83 个单测，含节拍/分轨/规划器/桥接生命周期）
 - `npm run verify` —— Playwright 驱动真实应用：导入 10 个夹具 → 逐项点按并截图
 - 针对性探针（`scripts/probe-flow.mjs`）实测：
   - 点第 3 行 → 正在播放 **就是第 3 首**（`Midnight Drive` → `Midnight Drive`），不再跳到下一首；
   - `Ctrl+Shift+F` 打开封面流：8 张封面渲染，滚轮后 `transform: translate3d(-210px,0,-120px) rotateY(58deg)`；
   - 设置页分组读出 `外观 / 资料库 / 歌词 / 歌词播放器 / 歌词源 / 背景 / 歌曲信息 / 顶栏材质 / 播放·AutoMix`。
-- 截图：`screenshots/29-cover-flow.png`、`30-cover-flow-moved.png`、`31-settings-groups.png`
+- 截图：`docs/images/29-cover-flow.png`、`30-cover-flow-moved.png`、`31-settings-groups.png`
+
+---
+
+## 13. 许可证
+
+本项目以 **AGPL-3.0-only** 发布（完整文本见仓库根目录的 [`LICENSE`](LICENSE)）。
+原因是直接链接了同样以 AGPL-3.0 发布的
+[Apple Music Like Lyrics](https://github.com/amll-dev/applemusic-like-lyrics) —— AGPL 的传染性要求
+整个作品以 AGPL 分发；其余依赖均为 MIT / ISC / Apache-2.0 级别，与 AGPL 兼容，逐项见
+[第 8 节](#8-第三方许可与归属)。
+
+**分轨模型不在分发范围内**：应用不附带任何模型权重，你需要自行下载并自行确认其许可
+（社区里多为 MIT 或 CC-BY，也有非商用许可的，请自行判断是否适合你的用途）。

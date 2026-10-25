@@ -1,6 +1,6 @@
 # 汽水音乐 AMLL 插件 → Pineapple Music 歌词页 移植说明
 
-> 来源：`…\work-mode-projects\6abdd4d1db0b869a79543e63\soda-amll-lyrics`
+> 来源：汽水音乐 AMLL 插件 `soda-amll-lyrics`（`src/inject.js` 2896 行）
 > 版本：插件 README 标注 v2.0（release 目录到 1.2.0），`src/inject.js` 2896 行 + `src/automix.js` 461 行
 > 目标：`src/renderer/src/components/FullscreenPlayer.tsx` 及其周边（overlayLayer 内的歌词页）
 > 日期：2026-10-25
