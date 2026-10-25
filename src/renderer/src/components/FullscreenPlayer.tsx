@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import { BackgroundRender } from '@applemusic-like-lyrics/react'
-import { useStore } from '../state/store'
-import { coverUrl } from '../bridge'
+import { useStore, useCurrentSongId } from '../state/store'
+import { bridge, coverUrl } from '../bridge'
 import { Cover } from './Cover'
 import { Icon } from './Icon'
 import { LyricsView, withDisplayOptions } from './LyricsView'
@@ -60,10 +60,22 @@ export function FullscreenPlayer(): JSX.Element {
   const albumArt = coverUrl(song?.coverId ?? null, 640)
   const trackRef = useRef<HTMLDivElement>(null)
 
+  // 歌词归属校验：store.lyrics 是异步加载的，切歌瞬间它还是上一首的载荷。
+  // 不校验 songId 就会出现「标题是 B、歌词滚的是 A」的错位 —— 等新歌词到位再显示。
+  const currentSongId = useCurrentSongId()
+  const lyricsForCurrent =
+    lyrics && currentSongId && lyrics.songId === currentSongId ? lyrics : null
+
+  // 「接下来播放」：队列下一首 + 它的歌词信息（首行预览与行数）。
+  // 随机推荐会打开全屏页，这张卡片就是「下一首歌词信息」的展示位。
+  const nextItem = playback.queue[playback.index + 1]
+  const nextSong = nextItem ? songs[nextItem.songId] : undefined
+  const [nextInfo, setNextInfo] = useState<{ preview: string | null; lines: number } | null>(null)
+
   const lines = useMemo(() => {
-    if (!lyrics || lyrics.kind !== 'synced') return []
-    return withDisplayOptions(lyrics.lines, settings.showTranslation, settings.showRoman)
-  }, [lyrics, settings.showTranslation, settings.showRoman])
+    if (!lyricsForCurrent || lyricsForCurrent.kind !== 'synced') return []
+    return withDisplayOptions(lyricsForCurrent.lines, settings.showTranslation, settings.showRoman)
+  }, [lyricsForCurrent, settings.showTranslation, settings.showRoman])
 
   const hasLyrics = lines.length > 0
   const position = playback.position
@@ -198,6 +210,27 @@ export function FullscreenPlayer(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted])
 
+  // 下一首歌词预览：只取首行文本，主进程有缓存，代价可以忽略。
+  useEffect(() => {
+    setNextInfo(null)
+    if (!open || !nextSong) return undefined
+    let alive = true
+    void bridge.lyrics(nextSong.id).then((payload) => {
+      if (!alive || !payload) return
+      const preview =
+        payload.kind === 'synced'
+          ? (payload.lines.find((l) => l.words.some((w) => w.word.trim()))?.words
+              .map((w) => w.word)
+              .join('')
+              .trim() ?? null)
+          : (payload.plain?.split(/\r?\n/).find((l) => l.trim())?.trim() ?? null)
+      setNextInfo({ preview, lines: payload.lines.length })
+    })
+    return () => {
+      alive = false
+    }
+  }, [open, nextSong?.id])
+
   const seekFrom = (clientX: number): void => {
     const el = trackRef.current
     if (!el || duration <= 0) return
@@ -273,6 +306,31 @@ export function FullscreenPlayer(): JSX.Element {
 
       {mounted && (
         <div className={styles.fsStage}>
+          {/* 接下来播放：右栏顶部悬浮卡片。放 fsStage 直接子级而不是 fsLyric 里，
+              因为 fsLyric 的上下 mask 渐隐会把卡片一起隐掉。 */}
+          {nextSong && (
+            <button
+              type="button"
+              className={styles.fsUpNext}
+              onClick={() => useStore.getState().jumpToQueueIndex(playback.index + 1)}
+              title="跳到下一首"
+            >
+              <Cover coverId={nextSong.coverId} size={80} display={34} radius={8} alt={nextSong.title} />
+              <span className={styles.fsUpNextText}>
+                <span className={styles.fsUpNextLabel}>接下来播放</span>
+                <span className={`${styles.fsUpNextTitle} ellipsis`}>{nextSong.title}</span>
+                <span className={`${styles.fsUpNextMeta} ellipsis`}>
+                  {nextSong.artists.join('、')}
+                  {nextInfo?.preview
+                    ? ` · ${nextInfo.preview}`
+                    : nextInfo && nextInfo.lines > 0
+                      ? ' · 歌词已就绪'
+                      : ''}
+                </span>
+              </span>
+              <Icon name="next" size={14} className={styles.fsUpNextIcon} />
+            </button>
+          )}
           <div className={styles.fsLeft}>
             <button
               type="button"

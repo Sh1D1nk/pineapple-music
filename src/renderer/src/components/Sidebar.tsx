@@ -23,6 +23,17 @@ export function Sidebar(): JSX.Element {
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
   const songs = useStore((s) => s.songs)
+  const songIds = useStore((s) => s.songIds)
+  const playRandom = useStore((s) => s.playRandom)
+  const pushToast = useStore((s) => s.pushToast)
+
+  const onRandom = (): void => {
+    if (songIds.length === 0) {
+      pushToast('曲库还是空的，先添加一些音乐吧')
+      return
+    }
+    playRandom()
+  }
 
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -58,7 +69,12 @@ export function Sidebar(): JSX.Element {
 
   useEffect(() => {
     if (debounce.current) window.clearTimeout(debounce.current)
-    debounce.current = window.setTimeout(() => setSearch(query), 120)
+    debounce.current = window.setTimeout(() => {
+      // store.search 与输入框一致时是 no-op：挂载（含 StrictMode 双挂载）时两者同为空，
+      // 不做这次守卫，setSearch('') 会把 init 恢复的详情页重置成最近添加。
+      if (useStore.getState().search === query) return
+      setSearch(query)
+    }, 120)
     return () => {
       if (debounce.current) window.clearTimeout(debounce.current)
     }
@@ -136,6 +152,13 @@ export function Sidebar(): JSX.Element {
           )
         })}
       </nav>
+
+      {/* 随机推荐：一次点击 = 随机挑一首歌播放 + 落到全屏歌词页（含下一首歌词信息）。
+          它是动作不是页面，所以放在主导航之外。 */}
+      <button type="button" className={styles.randomButton} onClick={onRandom} title="随机挑一首歌播放">
+        <Icon name="sparkles" size={18} />
+        <span>随机推荐</span>
+      </button>
 
       <div className={styles.spacer} />
       <ProgressWidget count={Object.keys(songs).length} />

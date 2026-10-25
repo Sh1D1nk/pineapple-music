@@ -108,6 +108,46 @@
   box-shadow: none;
 }
 
+/* 随机推荐：动作按钮而非导航项，浅 accent 底让它与主导航一眼区分 */
+.randomButton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  margin-top: 6px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  width: 100%;
+  text-align: left;
+  color: var(--on-accent, #fff);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 88%, transparent),
+    color-mix(in srgb, var(--accent) 68%, transparent)
+  );
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 30%, transparent);
+  transition:
+    transform var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
+    filter var(--dur-fast) var(--ease);
+}
+
+.randomButton:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+.randomButton:active {
+  transform: scale(0.97);
+}
+
+.randomButton svg {
+  flex: 0 0 auto;
+}
+
 .spacer {
   flex: 1 1 auto;
   min-height: 12px;

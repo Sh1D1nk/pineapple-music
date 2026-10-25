@@ -184,9 +184,9 @@ a {
   padding-right: calc(var(--queue-w) + 16px);
 }
 
-/* Fade the content out under the floating glass instead of letting text collide with it. */
-/* A narrow fade right under the glass, so text does not collide with the bar's edge while the
-   content behind the bar itself stays visible and refracted. */
+/* Fade the content out under the floating glass instead of letting text collide with it.
+   只在内容真的滚到玻璃条下方时淡入：它从 --bg-content 实色渐到透明，常驻渲染的话
+   就是一条横在页面顶部的「渐变小横条」（顶栏胶囊之间是透明的，遮罩直接露出来）。 */
 .scrollEdgeTop {
   position: absolute;
   top: 40px;
@@ -196,17 +196,12 @@ a {
   pointer-events: none;
   background: linear-gradient(to bottom, var(--bg-content) 30%, transparent 100%);
   z-index: 2;
+  opacity: 0;
+  transition: opacity 160ms ease;
 }
 
-.scrollEdgeLeft {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(var(--sidebar-w) + 2px);
-  width: 26px;
-  pointer-events: none;
-  background: linear-gradient(to right, var(--bg-content) 20%, transparent 100%);
-  z-index: 2;
+.scrollEdgeTop.scrollEdgeVisible {
+  opacity: 1;
 }
 
 .floatLayer {
@@ -382,6 +377,12 @@ a {
    这里仅处理全局的 .viewSwap。 */
 html[data-vt='1'] .viewSwap {
   animation: none !important;
+}
+
+/* View Transition 快照期间隐藏专辑页的 blur 背景：整页 blur(28px) 的新旧两帧合成
+   是「点开专辑」掉帧的大头。它只是氛围底，且被蒙层压着，过渡的 560ms 里隐身毫无破绽。 */
+html[data-vt='1'] .albumBg {
+  visibility: hidden;
 }
 
 /* 歌词高光：把 --amll-word-bright 接到 AMLL 的渐变 mask 透明度上 */

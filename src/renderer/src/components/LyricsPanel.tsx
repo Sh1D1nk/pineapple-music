@@ -31,10 +31,14 @@ export function LyricsPanel(): JSX.Element {
   const song = currentId ? songs[currentId] : undefined
   const albumArt = coverUrl(song?.coverId ?? null, 640)
 
+  // 歌词归属校验：store.lyrics 异步于切歌，校验 songId 避免「标题已切、歌词还滚上一首」。
+  const lyricsForCurrent =
+    lyrics && currentId && lyrics.songId === currentId ? lyrics : null
+
   const lines = useMemo(() => {
-    if (!lyrics || lyrics.kind !== 'synced') return []
-    return withDisplayOptions(lyrics.lines, settings.showTranslation, settings.showRoman)
-  }, [lyrics, settings.showTranslation, settings.showRoman])
+    if (!lyricsForCurrent || lyricsForCurrent.kind !== 'synced') return []
+    return withDisplayOptions(lyricsForCurrent.lines, settings.showTranslation, settings.showRoman)
+  }, [lyricsForCurrent, settings.showTranslation, settings.showRoman])
 
   const quality = settings.backgroundQuality
   const fps = quality === 'high' ? 60 : quality === 'medium' ? 30 : 24
@@ -97,7 +101,7 @@ export function LyricsPanel(): JSX.Element {
         </div>
 
         <div className={styles.lyricsBody}>
-          {lyrics && lyrics.kind === 'synced' && lines.length > 0 ? (
+          {lyricsForCurrent && lyricsForCurrent.kind === 'synced' && lines.length > 0 ? (
             <LyricsView
               lines={lines}
               playing={playing}
@@ -118,7 +122,7 @@ export function LyricsPanel(): JSX.Element {
               onSeek={(seconds) => seek(seconds)}
               color="#ffffff"
             />
-          ) : lyrics && lyrics.kind === 'plain' && lyrics.plain ? (
+          ) : lyricsForCurrent && lyricsForCurrent.kind === 'plain' && lyricsForCurrent.plain ? (
             <div
               style={{
                 height: '100%',
@@ -130,7 +134,7 @@ export function LyricsPanel(): JSX.Element {
                 padding: '0 8px'
               }}
             >
-              {lyrics.plain}
+              {lyricsForCurrent.plain}
             </div>
           ) : (
             <div className={styles.lyricsEmpty}>

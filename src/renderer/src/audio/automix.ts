@@ -285,7 +285,7 @@ function tick(): void {
       enterInFlight = true
       useAutoMix.getState().set({ status: 'entering' })
       void engine.crossfadeTo(armed.next, { position: 0, duration: 0.06 })
-      void state.loadLyrics(armed.next.id)
+      // 歌词由 store 的「当前歌曲 id」订阅驱动，这里不再手动 loadLyrics。
     }
     return
   }

@@ -263,8 +263,13 @@ export function App(): JSX.Element {
   useEffect(() => {
     const el = document.getElementById('contentScroll')
     if (!el) return undefined
+    // 顶部渐隐遮罩只在内容真的滚到玻璃条下方时出现：它常驻的话，
+    // 就是横在所有页面顶部的那条「渐变小横条」。直接改 classList 绕过 React ——
+    // 滚动每秒几十次，不值得为它重渲染整棵树。
+    const edge = document.querySelector('.scrollEdgeTop')
     const onScroll = (): void => {
       scrollMemory.current.set(viewKeyRef.current, el.scrollTop)
+      edge?.classList.toggle('scrollEdgeVisible', el.scrollTop > 4)
     }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
@@ -282,6 +287,8 @@ export function App(): JSX.Element {
       scrollMemory.current.delete(viewKey)
       el.scrollTop = 0
     }
+    // 换页后按新位置同步遮罩可见性（回到底部的页面不该留着渐隐条）
+    document.querySelector('.scrollEdgeTop')?.classList.toggle('scrollEdgeVisible', el.scrollTop > 4)
     lastView.current = { key: viewKey, kind: view.kind }
   }, [viewKey, view.kind])
 
@@ -290,7 +297,6 @@ export function App(): JSX.Element {
       <div className="app">
         <div className="contentLayer">
           <div className="scrollEdgeTop" />
-          <div className="scrollEdgeLeft" />
           <div id="contentScroll" className={`contentScroll ${queueOpen ? 'withQueue' : ''}`}>
             <div key={viewKey} className={`viewSwap ${navClass(navDirection)}`}>
               <Pages />

@@ -123,6 +123,7 @@ interface StoreState {
 
   playSongs: (ids: string[], startIndex: number) => void
   playSongNow: (id: string) => void
+  playRandom: () => void
   togglePlay: () => void
   next: (auto?: boolean) => void
   prev: () => void
@@ -193,9 +194,12 @@ function readPersisted(): Persisted | null {
 
 let persistTimer: number | null = null
 let initPromise: Promise<void> | null = null
-function persist(state: StoreState): void {
+function persist(_state?: StoreState): void {
   if (persistTimer !== null) window.clearTimeout(persistTimer)
   persistTimer = window.setTimeout(() => {
+    // 定时器触发时重新读 store：参数快照在 1.2s 延迟里可能已经过期，
+    // 用旧快照会把「上次的 view / 进度」写进磁盘（恢复后页面被悄悄换掉）。
+    const state = useStore.getState()
     const current = state.playback.queue[state.playback.index]
     const payload: Persisted = {
       songId: current?.songId ?? null,
@@ -368,7 +372,7 @@ export const useStore = create<StoreState>((set, get) => {
             const song = map[current.songId]
             if (song) {
               await engine.load(song, { autoplay: false, position: persisted.position ?? 0 })
-              void get().loadLyrics(song.id)
+              // 歌词由「当前歌曲 id」订阅统一驱动，见 store 创建处的说明。
             }
           }
         }
@@ -428,7 +432,18 @@ export const useStore = create<StoreState>((set, get) => {
       persist(get())
     },
     setSearch(value) {
-      set({ search: value, view: value.length > 0 ? { kind: 'search' } : { kind: 'recent' } })
+      // 只在「真的在搜索页」时才把清空导航回最近添加。
+      // 之前无条件 view: recent —— Sidebar 挂载时的那次 setSearch('') 会把
+      // 刚恢复的专辑详情页打回最近添加（表现为「点进专辑却跳到了最近添加」）。
+      const current = get().view
+      const view =
+        value.length > 0
+          ? { kind: 'search' as const }
+          : current.kind === 'search'
+            ? { kind: 'recent' as const }
+            : current
+      set({ search: value, view })
+      persist(get())
     },
     setQueueOpen(open) {
       set(open ? { queueOpen: true, lyricsOpen: false } : { queueOpen: false })
@@ -500,7 +515,6 @@ export const useStore = create<StoreState>((set, get) => {
       const song = get().songs[items[index]!.songId]
       if (song) {
         void engine.load(song, { autoplay: true, position: 0 })
-        void get().loadLyrics(song.id)
       }
       void bridge.orderAnalysis(ids)
       persist(get())
@@ -514,6 +528,34 @@ export const useStore = create<StoreState>((set, get) => {
         return
       }
       state.playSongs([id], 0)
+    },
+
+    playRandom() {
+      const state = get()
+      const ids = state.songIds
+      if (ids.length === 0) return
+      // 整库洗牌作为队列：这样「当前」与「下一首」都是随机的，
+      // 全屏歌词页的「接下来播放」卡片才有真实内容可显示。
+      const shuffled = shuffleArray(ids)
+      const currentId = state.playback.queue[state.playback.index]?.songId ?? null
+      // 只有一首歌时无从避开；否则把「还是当前这首」的头挪到队尾，保证真的换了一首
+      const pool =
+        shuffled[0] === currentId && shuffled.length > 1
+          ? [...shuffled.slice(1), shuffled[0]!]
+          : shuffled
+      const items = pool.map((songId) => ({ key: newKey(), songId }))
+      set({
+        playback: { ...state.playback, queue: items, index: 0, history: [] },
+        // 随机推荐的核心体验：点一下直接落到全屏歌词页（它与侧边歌词面板互斥，见 setFullscreen）
+        fullscreen: true,
+        lyricsOpen: false,
+        queueOpen: false
+      })
+      const song = state.songs[items[0]!.songId]
+      if (song) {
+        void engine.load(song, { autoplay: true, position: 0 })
+      }
+      persist(get())
     },
 
     togglePlay() {
@@ -537,7 +579,6 @@ export const useStore = create<StoreState>((set, get) => {
         const song = state.songs[shuffled[0]!.songId]
         if (song) {
           void engine.load(song, { autoplay: true, position: 0 })
-          void state.loadLyrics(song.id)
         }
         persist(get())
         return
@@ -548,7 +589,6 @@ export const useStore = create<StoreState>((set, get) => {
       set({ playback: { ...state.playback, index: nextIndex } })
       if (song) {
         void engine.crossfadeTo(song, { position: 0, duration: auto ? 1.2 : 0.7 })
-        void state.loadLyrics(song.id)
       }
       persist(get())
     },
@@ -568,7 +608,6 @@ export const useStore = create<StoreState>((set, get) => {
       set({ playback: { ...state.playback, index: prevIndex } })
       if (song) {
         void engine.crossfadeTo(song, { position: 0, duration: 0.7 })
-        void state.loadLyrics(song.id)
       }
       persist(get())
     },
@@ -679,7 +718,6 @@ export const useStore = create<StoreState>((set, get) => {
       set({ playback: { ...state.playback, index } })
       if (song) {
         void engine.load(song, { autoplay: true, position: 0 })
-        void state.loadLyrics(song.id)
       }
       persist(get())
     },
@@ -745,6 +783,19 @@ export const useCurrentSongId = (): string | null =>
   useStore((s) => s.playback.queue[s.playback.index]?.songId ?? null)
 
 export const useIsPlaying = (): boolean => useStore((s) => s.playback.playing)
+
+// 歌词跟随「当前歌曲」自动加载：订阅当前歌曲 id，变化即重载。
+// 之前 loadLyrics 分散在 playSongs / next / prev / jumpToQueueIndex / AutoMix 各处，
+// AutoMix 的 bridge 交接（engine.enterBridge）只推 engine 快照、不走这些入口，
+// 于是过渡结束后歌已经换掉了，歌词还停在上一首。订阅驱动从根上消灭漏调路径。
+// 注意：必须放在 create() 之后 —— factory 内部 useStore 还在 TDZ。
+let trackedLyricsSongId: string | null | undefined = undefined
+useStore.subscribe((state) => {
+  const songId = state.playback.queue[state.playback.index]?.songId ?? null
+  if (songId === trackedLyricsSongId) return
+  trackedLyricsSongId = songId
+  void useStore.getState().loadLyrics(songId)
+})
 
 if (typeof window !== 'undefined') {
   // 诊断用：控制台可直接读 store 状态

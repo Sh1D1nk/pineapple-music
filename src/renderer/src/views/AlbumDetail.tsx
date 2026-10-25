@@ -44,17 +44,20 @@ export function AlbumDetail({ albumKey }: Props): JSX.Element {
   return (
     <div className={`${styles.page} ${styles.albumPage}`}>
       {/* 专辑封面艺术图：按 cover 裁切、压暗、底部渐隐成页面底色。
-          它只是背景，不拦截点击，也不参与 View Transition（形变只作用于 MORPH_COVER 那一个封面）。 */}
+          它只是背景，不拦截点击，也不参与 View Transition（形变只作用于 MORPH_COVER 那一个封面）。
+          用 240px 那档 URL：与列表卡片同图 → 内存缓存命中、无需重新解码；
+          反正会被 blur(28px) 化成色块，640px 属于纯浪费，还是过渡动画掉帧的大头。 */}
       {album.coverId && (
         <div
           className={styles.albumBg}
-          style={{ backgroundImage: `url(${coverUrl(album.coverId, 640)})` }}
+          style={{ backgroundImage: `url(${coverUrl(album.coverId, 240)})` }}
           aria-hidden="true"
         />
       )}
       <div className={styles.albumHero}>
         <div className={styles.albumCover} style={{ viewTransitionName: MORPH_COVER }}>
-          <Cover coverId={album.coverId} size={640} radius={10} alt={album.name} />
+          {/* 详情页大图就是过渡形变的目标帧：必须 eager 立即解码，否则形变动画里它还是灰块 */}
+          <Cover coverId={album.coverId} size={640} radius={10} alt={album.name} priority />
         </div>
         <div className={styles.albumMeta}>
           <div className={styles.albumTitle}>{album.name}</div>

@@ -17,10 +17,12 @@
   pointer-events: none;
 }
 
-/* 只有背后这条透明带子是窗口拖拽区；所有胶囊都在它上面，正常收事件 */
+/* 只有背后这条透明带子是窗口拖拽区；所有胶囊都在它上面，正常收事件。
+   右侧必须让开 6px：drag 区域的命中测试（HTCAPTION）优先于系统缩放热区，
+   贴到窗口右边缘会把那一段的「拖边缩放」整个吃掉。 */
 .dragStrip {
   position: absolute;
-  inset: 0;
+  inset: 0 6px 0 0;
   z-index: 0;
   pointer-events: auto;
   -webkit-app-region: drag;
