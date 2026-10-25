@@ -10,9 +10,34 @@
 export interface StftOptions {
   nFft: number
   hop: number
+  /**
+   * 是否居中补零（librosa 的 center=True）。
+   * - true ：频点数 = nFft/2 + 1（第 0 个 bin 是 DC，最后一个是 Nyquist）
+   * - false：频点数 = nFft/2，帧从 startSample + f*hop 起算（UVR / MDX-Net 的做法）
+   *
+   * MDX-Net 系模型是按 center=False 训练的（dim_f = n_fft/2，例如 n_fft=4096 → 2048），
+   * 而本应用原先只用居中频谱（2049），于是所有真实 UVR 模型都会被判为「签名不兼容」。
+   */
+  center?: boolean
 }
 
-export const DEFAULT_STFT: StftOptions = { nFft: 4096, hop: 1024 }
+export const DEFAULT_STFT: StftOptions = { nFft: 4096, hop: 1024, center: true }
+
+/** 给定频点数，返回能喂给这个模型的频谱配置；返回 null 表示本应用的 FFT 跑不了它。 */
+export function stftProfileFor(bins: number): StftOptions | null {
+  switch (bins) {
+    case 2049:
+      return { nFft: 4096, hop: 1024, center: true }
+    case 2048:
+      return { nFft: 4096, hop: 1024, center: false }
+    case 4097:
+      return { nFft: 8192, hop: 2048, center: true }
+    case 4096:
+      return { nFft: 8192, hop: 2048, center: false }
+    default:
+      return null
+  }
+}
 
 /** 周期 Hann 窗（w[0] = 0），COLA 条件下 sum(w²) 在三帧内恒为 1.5。 */
 export function hannWindow(n: number): Float32Array {
@@ -97,7 +122,8 @@ export function stft(
   opts: StftOptions = DEFAULT_STFT
 ): Spectrum {
   const { nFft, hop } = opts
-  const bins = nFft / 2 + 1
+  const center = opts.center !== false
+  const bins = center ? nFft / 2 + 1 : nFft / 2
   const win = hannWindow(nFft)
   const out: Spectrum = {
     re: channels.map(() => new Float32Array(frames * bins)),
@@ -110,7 +136,7 @@ export function stft(
   const length = channels[0]?.length ?? 0
 
   for (let frame = 0; frame < frames; frame++) {
-    const origin = startSample + frame * hop - (nFft >> 1)
+    const origin = startSample + frame * hop - (center ? nFft >> 1 : 0)
     for (let ch = 0; ch < channels.length; ch++) {
       const src = channels[ch]!
       for (let i = 0; i < nFft; i++) {
@@ -143,14 +169,15 @@ export function istftAdd(
   opts: StftOptions = DEFAULT_STFT
 ): void {
   const { nFft, hop } = opts
-  const bins = nFft / 2 + 1
+  const center = opts.center !== false
+  const bins = center ? nFft / 2 + 1 : nFft / 2
   const win = hannWindow(nFft)
   const re = new Float32Array(nFft)
   const im = new Float32Array(nFft)
   const length = target[0]?.length ?? 0
 
   for (let frame = 0; frame < frames; frame++) {
-    const origin = startSample + frame * hop - (nFft >> 1)
+    const origin = startSample + frame * hop - (center ? nFft >> 1 : 0)
     const base = frame * bins
     for (let ch = 0; ch < target.length; ch++) {
       const srcRe = specRe[ch]
@@ -245,4 +272,30 @@ export function detectPhrases(
     else merged.push({ ...phrase })
   }
   return merged
+}
+
+/**
+ * 从 ONNX 输出里取人声掩码。
+ *
+ * 输出的布局是 [1, C, bins, frames] —— **时间维在最后**，所以第 (b, f) 个元素
+ * 位于 c*bins*frames + b*frames + f。按 frame-major 读会把掩码整体转置，
+ * 分轨结果就是一片噪声（这是之前那版分轨「能跑但完全不对」的原因）。
+ *
+ * 第 0 通道是人声（UVR 的 MDX / MDX23C 都取第一通道），伴奏用 1 - 掩码。
+ */
+export function readVocalMask(
+  data: Float32Array,
+  bins: number,
+  frames: number,
+  paddedFrames: number
+): Float32Array {
+  const out = new Float32Array(frames * bins)
+  for (let frame = 0; frame < frames; frame++) {
+    const to = frame * bins
+    for (let bin = 0; bin < bins; bin++) {
+      const raw = data[bin * paddedFrames + frame]!
+      out[to + bin] = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0
+    }
+  }
+  return out
 }

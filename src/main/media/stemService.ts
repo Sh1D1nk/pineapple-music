@@ -1,7 +1,7 @@
 import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { SongMeta, StemInfo } from '@shared/types'
-import { DEFAULT_STFT, applyNorm, detectPhrases, istftAdd, rmsCurve, stft } from '@shared/stem/stft'
+import { applyNorm, detectPhrases, istftAdd, readVocalMask, rmsCurve, stft } from '@shared/stem/stft'
 import { decodeClip } from './ffmpeg'
 import { getSession, modelExists, status as runtimeStatus } from './stemRuntime'
 import { stemsDir } from '../paths'
@@ -24,6 +24,12 @@ export interface StemProgress {
 }
 
 const CHUNK_FRAMES = 64
+
+/** 一次推理返回的掩码：planes[0] 是人声掩码。 */
+interface StemMask {
+  kind: 'real'
+  planes: Float32Array[]
+}
 
 interface Deps {
   songs: () => SongMeta[]
@@ -171,47 +177,69 @@ export class StemService {
       if (!modelExists(this.model)) throw new Error('模型文件已丢失')
 
       const clip = await decodeClip(song.path, { channels: 2, sampleRate: 44100 })
-      const [left, right] = clip.channels as [Float32Array, Float32Array]
-      const length = Math.min(left.length, right.length)
-      const vocals: Float32Array[] = [new Float32Array(length), new Float32Array(length)]
-      const inst: Float32Array[] = [new Float32Array(length), new Float32Array(length)]
-      const norm = new Float32Array(length)
+      const [leftRaw, rightRaw] = clip.channels as [Float32Array, Float32Array]
+      const length = Math.min(leftRaw.length, rightRaw.length)
 
-      const totalFrames = Math.ceil((length + DEFAULT_STFT.nFft) / DEFAULT_STFT.hop)
       const session = await getSession(this.model)
       if (!session) throw new Error('模型加载失败')
 
+      // 频谱参数按模型签名走：MDX-Net 是 n_fft=4096 不居中（2048 个频点），
+      // 合成测试模型是 4096 居中（2049）。块大小取模型自己的固定帧数（常见 256）。
+      const profile = session.info.profile
+      const chunkFrames = Math.max(16, Math.min(session.info.maxFrames ?? CHUNK_FRAMES, 512))
+
+      // 不居中的频谱（MDX-Net 的做法）第一帧的窗函数在样本 0 处为 0，
+      // 直接算会让开头 n_fft/2 个样本被吃掉。UVR 的做法是首尾各补 n_fft/2 个零，
+      // 这里照做：补零后再算，最后把补的部分裁掉。
+      const pad = profile.center === false ? Math.floor(profile.nFft / 2) : 0
+      const paddedLength = length + pad * 2
+      const left = new Float32Array(paddedLength)
+      const right = new Float32Array(paddedLength)
+      left.set(leftRaw.subarray(0, length), pad)
+      right.set(rightRaw.subarray(0, length), pad)
+      const vocals: Float32Array[] = [new Float32Array(paddedLength), new Float32Array(paddedLength)]
+      const inst: Float32Array[] = [new Float32Array(paddedLength), new Float32Array(paddedLength)]
+      const norm = new Float32Array(paddedLength)
+      const totalFrames = Math.ceil((paddedLength + profile.nFft) / profile.hop)
+
       this.progress.stage = 'infer'
-      for (let frame = 0; frame < totalFrames; frame += CHUNK_FRAMES) {
+      for (let frame = 0; frame < totalFrames; frame += chunkFrames) {
         if (this.cancelled) throw new Error('已取消')
-        const frames = Math.min(CHUNK_FRAMES, totalFrames - frame)
-        const spec = stft([left, right], frame * DEFAULT_STFT.hop, frames)
+        const frames = Math.min(chunkFrames, totalFrames - frame)
+        const spec = stft([left, right], frame * profile.hop, frames, profile)
         const mask = await this.inferMask(session, spec.re, spec.im, frames)
         const vocRe = [new Float32Array(frames * spec.bins), new Float32Array(frames * spec.bins)]
         const vocIm = [new Float32Array(frames * spec.bins), new Float32Array(frames * spec.bins)]
         const insRe = [new Float32Array(frames * spec.bins), new Float32Array(frames * spec.bins)]
         const insIm = [new Float32Array(frames * spec.bins), new Float32Array(frames * spec.bins)]
+        // 掩码第 0 通道就是人声掩码（UVR 的 MDX/MDX23C 都是这么取的）：
+        // 人声轨 = 谱 × 掩码，伴奏轨 = 谱 × (1 - 掩码)，两声道用同一张掩码。
+        const vocalMask = mask.planes[0]!
         for (let ch = 0; ch < 2; ch++) {
-          const m = mask[ch]!
           for (let i = 0; i < frames * spec.bins; i++) {
-            const value = m[i]!
+            const value = vocalMask[i]!
             vocRe[ch]![i] = spec.re[ch]![i]! * value
             vocIm[ch]![i] = spec.im[ch]![i]! * value
             insRe[ch]![i] = spec.re[ch]![i]! * (1 - value)
             insIm[ch]![i] = spec.im[ch]![i]! * (1 - value)
           }
         }
-        const startSample = frame * DEFAULT_STFT.hop
-        istftAdd(vocals, norm, vocRe, vocIm, startSample, frames)
-        istftAdd(inst, norm, insRe, insIm, startSample, frames)
+        const startSample = frame * profile.hop
+        istftAdd(vocals, norm, vocRe, vocIm, startSample, frames, profile)
+        istftAdd(inst, norm, insRe, insIm, startSample, frames, profile)
         this.progress.percent = Math.min(0.95, (frame + frames) / totalFrames)
-        if (frame % (CHUNK_FRAMES * 8) === 0) this.emit()
+        if (frame % (chunkFrames * 8) === 0) this.emit()
         // 让主进程喘口气：分块之间让出事件循环，窗口不会因为分轨卡住
         await new Promise((resolve) => setTimeout(resolve, 0))
       }
 
       applyNorm(vocals, norm)
       applyNorm(inst, norm)
+      // 裁掉首尾补的零
+      if (pad > 0) {
+        for (const track of [...vocals, ...inst]) track.copyWithin(0, pad, pad + length)
+        for (const track of [...vocals, ...inst]) track.fill(0, length)
+      }
 
       this.progress.stage = 'write'
       this.emit()
@@ -262,13 +290,22 @@ export class StemService {
     }
   }
 
-  /** 把一块频谱送进模型，返回 [L, R] 两个 mask（长度 frames*bins）。 */
+  /**
+   * 把一块频谱送进模型，返回人声掩码。
+   *
+   * 两个容易踩的坑：
+   * 1. 输出布局是 [1, C, bins, frames] —— 时间维在最后，所以第 (b, f) 个元素
+   *    在 c*bins*frames + b*frames + f。**按 frame-major 读会把掩码整体转置**，
+   *    结果是分轨出来全是噪声。
+   * 2. 掩码的第 0 通道才是人声（UVR 的 MDX / MDX23C 都取第一通道），
+   *    伴奏轨用 1 - 掩码。
+   */
   private async inferMask(
     ctx: Awaited<ReturnType<typeof getSession>>,
     re: Float32Array[],
     im: Float32Array[],
     frames: number
-  ): Promise<Float32Array[]> {
+  ): Promise<StemMask> {
     if (!ctx) throw new Error('模型会话不可用')
     const { ort, session, info } = ctx
     const bins = info.bins
@@ -293,26 +330,14 @@ export class StemService {
     const feeds: Record<string, unknown> = { [info.inputName]: tensor }
     const result = await session.run(feeds)
     const output = result[info.outputName] ?? Object.values(result)[0]
-    const outFrames = padded
-    if (!output || output.data.length !== 2 * bins * outFrames) {
-      throw new Error(`模型输出形状不符合预期：期望 ${2 * bins * outFrames} 个 float，实际 ${output?.data.length ?? 0}`)
+    if (!output || output.data.length < bins * padded) {
+      throw new Error(
+        `模型输出形状不符合预期：期望至少 ${bins * padded} 个 float，实际 ${output?.data.length ?? 0}`
+      )
     }
-    const left = new Float32Array(frames * bins)
-    const right = new Float32Array(frames * bins)
-    // 输出前两个通道当作 L/R mask；单通道模型退化为两支相同
-    const outPlanes = output.data.length / (bins * outFrames)
-    for (let frame = 0; frame < frames; frame++) {
-      const base = frame * bins
-      const lOff = 0 * bins * outFrames + base
-      const rOff = (outPlanes >= 2 ? 1 : 0) * bins * outFrames + base
-      left.set(output.data.subarray(lOff, lOff + bins), base)
-      right.set(output.data.subarray(rOff, rOff + bins), base)
-    }
-    for (let i = 0; i < left.length; i++) {
-      left[i] = Math.min(1, Math.max(0, left[i]!))
-      right[i] = Math.min(1, Math.max(0, right[i]!))
-    }
-    return [left, right]
+    // 输出是 [C][bins][frames]：取第 0 通道（人声），按 bin-major 读回 frame-major
+    const vocal = readVocalMask(output.data, bins, frames, padded)
+    return { kind: 'real', planes: [vocal, vocal] }
   }
 
   /** 按 cacheLimitGB 做一次简单的「最久未用」淘汰。 */

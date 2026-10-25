@@ -140,11 +140,15 @@ function ModelSection(): JSX.Element {
   const progress = stems?.progress
   const running = Boolean(progress?.active)
 
+  const rejectedNames = new Set((status?.rejected ?? []).map((entry) => entry.name))
+  const usable = (status?.files ?? []).filter((file) => !rejectedNames.has(file.name))
   const installedText = !status
     ? '读取中…'
-    : status.installed
-      ? `${status.files[0]!.name} · ${(status.files[0]!.size / 1024 / 1024).toFixed(0)} MB`
-      : '未安装'
+    : usable.length > 0
+      ? `${usable[0]!.name} · ${(usable[0]!.size / 1024 / 1024).toFixed(0)} MB（共 ${usable.length} 个可用）`
+      : status.files.length > 0
+        ? `目录里有 ${status.files.length} 个文件，但都不兼容`
+        : '未安装'
 
   return (
     <>
@@ -153,7 +157,7 @@ function ModelSection(): JSX.Element {
         hint={`把 vocal / instrumental 两轨 ONNX 放进模型目录即可解锁 A/B 级。当前模型：${installedText}`}
       >
         <span className={styles.statValue} style={{ fontSize: 13 }}>
-          {status?.installed ? '已安装' : '未安装'}
+          {status?.installed ? '已安装' : status && status.files.length > 0 ? '不兼容' : '未安装'}
         </span>
       </Row>
 
@@ -169,15 +173,18 @@ function ModelSection(): JSX.Element {
         <div className={styles.guideRow}>
           <span className={styles.guideLabel}>格式</span>
           <span className={styles.guideValue}>
-            ONNX，<b>频谱 mask 家族</b>（UVR / MDX-Net 系导出）。输入输出同形状 <code>[1, C, 2049, T]</code>，
-            C = 2（立体声实虚）或 4（+ 单声道），前两通道当 L / R mask；STFT 固定 n_fft=4096 / hop=1024。
+            ONNX，<b>频谱 mask 家族</b>（UVR / MDX-Net 系导出）。输入输出同形状
+            <code>[1, C, bins, T]</code>，C = 2（单声道实虚）或 4（立体声实虚）。
+            频点数决定用哪种频谱：<code>2049</code> 居中（n_fft=4096）、<code>2048</code> 不居中（MDX-Net 标准）、
+            <code>4096 / 4097</code> 走 n_fft=8192；掩码第 0 通道即人声。
           </span>
         </div>
         <div className={styles.guideRow}>
           <span className={styles.guideLabel}>不兼容</span>
           <span className={styles.guideValue}>
-            不支持 4-stem（鼓 / 贝斯 / 和声分离）、不支持波形域模型（WaveGAN 一类）、不支持 GPU Execution Provider；
-            频点数不是 2049 的导出（例如 <code>[1, 4, 3072, 256]</code>）也会被拒绝。
+            不支持 4-stem（鼓 / 贝斯 / 和声分离）的语义拆分、不支持波形域模型（WaveGAN 一类）、
+            不支持 GPU Execution Provider；频点数需要 n_fft=6144 的导出
+            （例如 <code>[1, 4, 3072, 256]</code>）也会被拒绝 —— 本应用的 FFT 只支持 2 的幂长度。
           </span>
         </div>
         <div className={styles.guideRow}>
@@ -261,7 +268,9 @@ function ModelSection(): JSX.Element {
             ? `按 ${level} 级规划`
             : status?.installed
               ? '等待播放与队列中出现下一首'
-              : '未安装分轨模型：现在固定走 C 级，装好后可升到 A / B 级')
+              : status && status.files.length > 0
+                ? `分轨模型不兼容：${status.rejected[0]?.reason ?? '签名不支持'}；现在固定走 C 级`
+                : '未安装分轨模型：现在固定走 C 级，装好后可升到 A / B 级')
         }
       >
         <span className={styles.statValue} style={{ fontSize: 15 }}>

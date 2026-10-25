@@ -1,14 +1,20 @@
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { modelsDir } from '../paths'
+import { stftProfileFor, type StftOptions } from '../../shared/stem/stft'
 
 /**
  * 分轨模型运行时。
  *
- * 只认一种签名：4 维频谱 mask 模型（UVR / MDX-Net 系），
- *   输入  [1, C, 2049, T]  float32，C = 2（立体声实部/虚部）或 4（+ 单声道实虚）
- *   输出  [1, C', 2049, T] float32，取前 2 通道当作立体声 mask
- * 其它签名一律拒绝并给出可读原因，绝不做「形状对不上还硬喂」的推理。
+ * 认的是「频谱 mask 模型」这一类签名：
+ *   输入  [1, C, bins, T]  float32，C = 2（单声道实虚）或 4（立体声实虚交错）
+ *   输出  [1, C', bins, T] float32
+ * 其中 bins 决定本应用要用哪种频谱：
+ *   2049 → n_fft=4096 居中（合成测试模型 / librosa 风格）
+ *   2048 → n_fft=4096 不居中（UVR MDX-Net 的标准设置）
+ *   4097 / 4096 → n_fft=8192
+ * 其它 bins（例如 MDX 的 3072 → n_fft=6144）本应用的 radix-2 FFT 跑不了，
+ * 会明确写出原因，而不是「形状对不上还硬喂」。
  */
 
 export interface StemModelInfo {
@@ -20,6 +26,8 @@ export interface StemModelInfo {
   channels: number
   bins: number
   maxFrames: number | null
+  /** 这个模型需要的频谱配置（按 bins 推导） */
+  profile: StftOptions
 }
 
 export interface StemRuntimeStatus {
@@ -130,7 +138,9 @@ export async function inspectModel(file: string): Promise<StemModelInfo | null> 
   const bins = Number(input.dimensions[2])
   const frames = Number(input.dimensions[3])
   if (!Number.isFinite(channels) || (channels !== 2 && channels !== 4)) return null
-  if (!Number.isFinite(bins) || bins !== 2049) return null
+  // bins 决定用哪种频谱：2049 居中 / 2048 不居中（MDX-Net）/ 4096、4097 走 n_fft=8192
+  const profile = stftProfileFor(bins)
+  if (!profile) return null
   return {
     file,
     name: file.split(/[\\/]/).pop() ?? file,
@@ -139,12 +149,14 @@ export async function inspectModel(file: string): Promise<StemModelInfo | null> 
     outputName: output.name,
     channels,
     bins,
-    maxFrames: Number.isFinite(frames) && frames > 0 ? frames : null
+    maxFrames: Number.isFinite(frames) && frames > 0 ? frames : null,
+    profile
   }
 }
 
 /** 拆轨模型要求的签名，用于把「为什么不能用」讲清楚。 */
-export const EXPECTED_SIGNATURE = '输入 [1, C, 2049, T]（C = 2 或 4），输出同形状的频谱 mask'
+export const EXPECTED_SIGNATURE =
+  '输入 [1, C, bins, T]（C = 2 或 4；bins = 2049 居中 / 2048 不居中 / 4096、4097），输出同形状的频谱 mask'
 
 export interface ModelProbe {
   ok: boolean
@@ -287,7 +299,7 @@ export async function status(): Promise<StemRuntimeStatus> {
         ? null
         : listModelFiles().length === 0
           ? '模型目录里没有 .onnx 文件'
-          : `模型签名不支持：需要${EXPECTED_SIGNATURE}`
+          : `模型签名不支持：需要${EXPECTED_SIGNATURE}（被拒原因见下方列表）`
   }
 }
 
