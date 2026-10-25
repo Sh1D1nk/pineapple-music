@@ -23,6 +23,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Compile (electron-vite build)
+        run: npm run compile
+
       - name: Build installer
         run: npx electron-builder --win nsis --publish never
         env:
