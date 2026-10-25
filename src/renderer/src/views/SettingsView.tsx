@@ -362,6 +362,19 @@ export function SettingsView(): JSX.Element {
   const update = useStore((s) => s.updateSettings)
   const folders = useStore((s) => s.folders)
   const glass = useGlass()
+  const pushToast = useStore((s) => s.pushToast)
+  // 当前曲目与下一首的分轨状态：只取字符串，避免播放进度把整页刷一遍
+  const currentStemState = useStore((s) => {
+    const id = s.playback.queue[s.playback.index]?.songId
+    return id ? (s.songs[id]?.stem?.state ?? 'none') : 'none'
+  })
+  const [stemsReady, setStemsReady] = useState(false)
+  useEffect(() => {
+    void bridge.stems
+      .status()
+      .then((status) => setStemsReady(status.ready))
+      .catch(() => setStemsReady(false))
+  }, [])
 
   const automix = settings.automix
   const patchAutomix = (patch: Partial<typeof automix>): void => {
@@ -783,6 +796,34 @@ export function SettingsView(): JSX.Element {
         </Row>
         <Row label="缓存上限">
           <Slider value={automix.cacheLimitGB} min={1} max={50} suffix=" GB" onChange={(value) => patchAutomix({ cacheLimitGB: value })} />
+        </Row>
+        <Row
+          label="当前曲目分轨"
+          hint={
+            currentStemState === 'ready'
+              ? '当前曲目已分轨，A / B 级过渡可用'
+              : stemsReady
+                ? 'A / B 级过渡需要「当前 + 下一首」的分轨；没有分轨时固定走 C 级（整曲节拍对齐）'
+                : '没有可用模型时固定走 C 级（整曲节拍对齐 + 低频交换）'
+          }
+        >
+          <button
+            type="button"
+            className={styles.segment}
+            style={{ height: 30 }}
+            disabled={!stemsReady || currentStemState === 'ready'}
+            onClick={() => {
+              const state = useStore.getState()
+              const current = state.playback.queue[state.playback.index]?.songId
+              const next = state.playback.queue[state.playback.index + 1]?.songId
+              const ids = [current, next].filter((id): id is string => Boolean(id))
+              if (ids.length === 0) return
+              void bridge.stems.enqueue(ids)
+              pushToast('已加入分轨队列')
+            }}
+          >
+            {currentStemState === 'ready' ? '已分轨' : '生成分轨'}
+          </button>
         </Row>
         <ModelSection />
         <div className={styles.note}>

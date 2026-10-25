@@ -113,6 +113,31 @@ let activeJob: ActiveJob | null = null
 let ticker: number | null = null
 let armed: { plan: TransitionPlan; current: SongMeta; next: SongMeta } | null = null
 let enterInFlight = false
+let stemsHinted = false
+
+/**
+ * 把缺分轨的曲目排进后台分轨队列。
+ *
+ * A / B 级过渡需要人声乐句（来自分轨），没有分轨就固定走 C 级。
+ * 分轨是重活（CPU 推理），但它是后台串行队列，不会挡播放 —— 与其让用户
+ * 「知道要分轨却不知道去哪点」，不如在切歌时顺手排上。
+ */
+async function ensureStems(ids: string[]): Promise<void> {
+  try {
+    const runtime = await bridge.stems.status()
+    if (!runtime.ready) return
+    const state = useStore.getState()
+    const missing = ids.filter((id) => state.songs[id]?.stem?.state !== 'ready')
+    if (missing.length === 0) return
+    if (!stemsHinted) {
+      stemsHinted = true
+      state.pushToast('正在后台生成分轨，A / B 级过渡需要它')
+    }
+    await bridge.stems.enqueue(missing)
+  } catch {
+    /* 分轨不可用（没有模型 / 运行时缺失）时静默降级到 C 级 */
+  }
+}
 
 export function cancelAutoMix(reason = '已取消自动衔接'): void {
   if (activeJob) activeJob.cancelled = true
@@ -203,6 +228,9 @@ export function planForCurrent(): void {
     useAutoMix.getState().set({ status: 'idle', plan: null, level: null, nextSongId: null, message: null })
     return
   }
+  // A / B 级过渡要靠「当前 + 下一首」的分轨（人声乐句）来挑人声退出点。
+  // 没有分轨就固定走 C 级 —— 所以这里顺手把分轨排进后台队列，别让用户自己去设置页找按钮。
+  if (state.settings.automix.stems) void ensureStems([current.id, next.id])
   if (!current.analysis || !next.analysis) {
     useAutoMix.getState().set({
       status: 'idle',

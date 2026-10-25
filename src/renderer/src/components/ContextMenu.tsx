@@ -162,6 +162,22 @@ export function ContextMenu(): JSX.Element | null {
       >
         复制歌名
       </button>
+      {song.stem?.state !== 'ready' && (
+        <>
+          <div className={styles.menuSeparator} />
+          <button
+            type="button"
+            className={styles.menuItem}
+            onClick={() => {
+              void bridge.stems.enqueue([song.id])
+              pushToast('已加入分轨队列')
+              setContextMenu(null)
+            }}
+          >
+            生成分轨（人声 / 伴奏）
+          </button>
+        </>
+      )}
     </div>
   )
 }
