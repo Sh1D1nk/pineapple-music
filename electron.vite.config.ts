@@ -16,7 +16,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
-          'worker-analysis': resolve(__dirname, 'src/main/workers/analysis.worker.ts')
+          'worker-analysis': resolve(__dirname, 'src/main/workers/analysis.worker.ts'),
+          'worker-stem': resolve(__dirname, 'src/main/workers/stem.worker.ts')
         },
         // `electron` is a devDependency, so the plugin would otherwise inline the npm shim that
         // merely exports the binary path instead of the runtime module.

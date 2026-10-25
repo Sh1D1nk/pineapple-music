@@ -1,6 +1,5 @@
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { modelsDir } from '../paths'
 import { stftProfileFor, type StftOptions } from '../../shared/stem/stft'
 
 /**
@@ -104,7 +103,12 @@ function normalizeMeta(
   return list.map((entry, i) => ({ name: entry.name || names[i] || '', dimensions: entry.dimensions as number[] }))
 }
 
-function listModelFiles(): string[] {
+/**
+ * 列出模型目录里的 .onnx 文件。paths.ts 依赖 electron（app.getPath），而本模块会被
+ * worker-stem 线程导入（那边没有 electron），所以这里改成动态导入、只在主进程侧调用。
+ */
+async function listModelFiles(): Promise<string[]> {
+  const { modelsDir } = await import('../paths')
   try {
     return readdirSync(modelsDir())
       .filter((name) => name.toLowerCase().endsWith('.onnx'))
@@ -279,7 +283,8 @@ export async function status(): Promise<StemRuntimeStatus> {
   }
   const models: StemModelInfo[] = []
   const rejected: { name: string; reason: string }[] = []
-  for (const file of listModelFiles()) {
+  const files = await listModelFiles()
+  for (const file of files) {
     const info = await inspectModel(file)
     if (info) {
       models.push(info)
@@ -297,7 +302,7 @@ export async function status(): Promise<StemRuntimeStatus> {
     reason:
       models.length > 0
         ? null
-        : listModelFiles().length === 0
+        : files.length === 0
           ? '模型目录里没有 .onnx 文件'
           : `模型签名不支持：需要${EXPECTED_SIGNATURE}（被拒原因见下方列表）`
   }
