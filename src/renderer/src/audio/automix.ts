@@ -135,6 +135,10 @@ export async function prepareAutoMix(current: SongMeta, next: SongMeta): Promise
   const settings = state.settings.automix
   const job: ActiveJob = { songId: current.id, cancelled: false }
   activeJob = job
+  // 作废旧计划：新计划可能失败（缺分析、渲染出错），此时旧的 armed 计划如果留着，
+  // 调度器就会拿它去「进入过渡」——旧计划的 startTime 可能是 0，
+  // 于是新歌一开播就立刻过渡，交接后再进入下一轮，看起来就是「一直切歌」。
+  armed = null
   const setAm = useAutoMix.getState().set
   setAm({ status: 'planning', nextSongId: next.id, message: null, renderMs: null })
 
@@ -233,6 +237,18 @@ function tick(): void {
   }
 
   if (!armed || armed.current.id !== current.id) return
+  // 计划必须还对得上「下一首是谁」：队列变了就不能拿旧计划过渡
+  const plannedNext = state.playback.queue[state.playback.index + 1]
+  if (!plannedNext || armed.next.id !== plannedNext.songId) {
+    armed = null
+    return
+  }
+  // 一次过渡只能 enter 一次。
+  // 之前这里只靠 `enterInFlight` 在「交接完成后」复位，进入分支本身不检查它，
+  // 于是播放头一旦落进 [start-0.15, start+2] 窗口，每 120ms 的 tick 就会再 enter 一次：
+  // 每次都会新建一个 BufferSource、把 startedAt 往后推、把 finished 置回 false，
+  // 结果是 bridge 永远交接不完（听感上一直卡在过渡里），旧 source 还叠着放。
+  if (enterInFlight || engine.isBridging()) return
   const plan = armed.plan
   const position = engine.snapshot().position
 
@@ -247,6 +263,13 @@ function tick(): void {
   }
 
   if (!engine.hasBridge()) return
+  // startTime 落在 0 附近 = 这份计划根本不是给这首歌准备的（多半是上一对的残留）。
+  // 这种计划一旦进入，就会出现「刚开播就过渡、过渡完又过渡」的连锁。
+  if (plan.startTime < 0.5) {
+    armed = null
+    useAutoMix.getState().set({ status: 'failed', plan: null, level: null, message: '过渡起点无效，改用自然衔接' })
+    return
+  }
   if (position >= plan.startTime - 0.15 && position <= plan.startTime + 2) {
     enterInFlight = true
     engine.enterBridge(Math.max(0, position - plan.startTime))

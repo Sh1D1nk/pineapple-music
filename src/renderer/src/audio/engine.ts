@@ -36,6 +36,8 @@ interface BridgeRun {
   buffer: AudioBuffer
   source: AudioBufferSourceNode | null
   gain: GainNode
+  /** 是否真的开始播了过渡。准备好 ≠ 已经开始，这是本轮连锁 bug 的关键区分。 */
+  started: boolean
   startedAt: number
   pausedAtBridgeTime: number | null
   switched: boolean
@@ -132,7 +134,7 @@ export class AudioEngine {
   snapshot(): EngineSnapshot {
     const deck = this.decks?.[this.active]
     const bridge = this.bridge
-    if (bridge && !bridge.finished) {
+    if (bridge && bridge.started && !bridge.finished) {
       const t = this.bridgeTime()
       const useNext = t >= bridge.plan.uiSwitchAt
       return {
@@ -176,6 +178,8 @@ export class AudioEngine {
   private bridgeTime(): number {
     const run = this.bridge
     if (!run || !this.ctx) return 0
+    // 还没开始的过渡，时间轴不走
+    if (!run.started) return 0
     if (run.pausedAtBridgeTime !== null) return run.pausedAtBridgeTime
     return Math.max(0, Math.min(run.plan.bridgeDuration, this.ctx.currentTime - run.startedAt))
   }
@@ -235,7 +239,7 @@ export class AudioEngine {
   async play(): Promise<void> {
     const ctx = this.ensureContext()
     if (ctx.state === 'suspended') await ctx.resume()
-    if (this.bridge && !this.bridge.finished) {
+    if (this.bridge && this.bridge.started && !this.bridge.finished) {
       this.resumeBridge()
       return
     }
@@ -255,7 +259,7 @@ export class AudioEngine {
   }
 
   pause(): void {
-    if (this.bridge && !this.bridge.finished) {
+    if (this.bridge && this.bridge.started && !this.bridge.finished) {
       this.pauseBridge()
       return
     }
@@ -275,6 +279,14 @@ export class AudioEngine {
   seek(seconds: number): void {
     if (this.bridge && !this.bridge.finished) {
       const run = this.bridge
+      if (!run.started) {
+        // 只是备着、还没开始的过渡：保留它，只把当前 deck 挪到目标位置。
+        // 丢掉的话，这次 seek 之后整首歌都不会再有 AutoMix 过渡（桥接缓冲已经渲染好了）。
+        const deckEl = this.decks?.[this.active]
+        if (deckEl) deckEl.el.currentTime = Math.max(0, seconds)
+        this.emit()
+        return
+      } else {
       const t = this.bridgeTime()
       const onNext = t >= run.plan.uiSwitchAt
       const target = Math.max(0, seconds)
@@ -285,6 +297,7 @@ export class AudioEngine {
         void this.load(run.currentSong, { autoplay: true, position: target })
       }
       return
+      }
     }
     const deck = this.decks?.[this.active]
     if (!deck) return
@@ -387,7 +400,8 @@ export class AudioEngine {
       buffer,
       source: null,
       gain: this.ctx!.createGain(),
-      startedAt: 0,
+      started: false,
+      startedAt: this.ctx!.currentTime,
       pausedAtBridgeTime: null,
       switched: false,
       finished: false,
@@ -396,7 +410,13 @@ export class AudioEngine {
     }
     this.bridge.gain.connect(this.master!)
     this.bridge.gain.gain.value = 0
-    this.phase = 'bridge'
+    // 这里只是「把过渡准备好」，还没开始播。
+    //
+    // 之前在这一步就把 phase 置成 'bridge'、startedAt 置 0，于是 bridgeTime()
+    // 变成了「AudioContext 诞生以来的秒数」（几十秒），engine.tick() 立刻判定
+    // t >= bridgeDuration - FADE → 准备完就直接交接 → 下一首又准备、又交接……
+    // 表现就是「自动过渡、一首接一首、每首都在过渡里」。
+    // 引擎保持在 playing，等调度器在真正的过渡起点调用 enterBridge()。
     this.emit()
   }
 
@@ -406,7 +426,12 @@ export class AudioEngine {
 
   /** Bridge 正在出声：此时 store 里的「当前歌曲」由 bridge 自己切换，调度器不能当成用户切歌。 */
   isBridging(): boolean {
-    return this.phase === 'bridge' && this.bridge != null && !this.bridge.finished
+    return (
+      this.phase === 'bridge' &&
+      this.bridge != null &&
+      this.bridge.started &&
+      !this.bridge.finished
+    )
   }
 
   bridgedSongIds(): string[] {
@@ -417,6 +442,10 @@ export class AudioEngine {
   enterBridge(offsetSec = 0): boolean {
     const run = this.bridge
     if (!run || !this.ctx || !this.master) return false
+    // 幂等：重复 enter 会叠出第二个 BufferSource，并把 startedAt 往后推，
+    // 让交接时间永远到不了 —— 表现就是「一直卡在过渡里」。
+    if (this.phase === 'bridge' && run.source) return false
+    if (run.finished) return false
     const ctx = this.ctx
     const when = ctx.currentTime + 0.06
     const offset = Math.max(0, Math.min(offsetSec, Math.max(0, run.buffer.duration - 0.5)))
@@ -426,6 +455,7 @@ export class AudioEngine {
     source.start(when, offset)
 
     run.source = source
+    run.started = true
     run.startedAt = when - offset
     run.pausedAtBridgeTime = null
     run.switched = false
@@ -524,6 +554,11 @@ export class AudioEngine {
       return
     }
     if (run.pausedAtBridgeTime !== null) return
+    // 只是「准备好」的过渡：没有 source、没有时间轴，不能推进，更不能交接
+    if (!run.started) {
+      this.emit()
+      return
+    }
     const t = this.bridgeTime()
 
     if (!run.switched && t >= run.plan.uiSwitchAt) {
