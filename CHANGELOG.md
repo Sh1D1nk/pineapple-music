@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.4.0 - 2026-10-25
+
+AutoMix 核心算法从 HyPlayer-Nextgen（github.com/Gaimoydev/HyPlayer-Nextgen）移植升级。
+分析其实现后发现我们与它同族（同为 signalsmith-stretch 时间拉伸 + 低频交棒 + 等功率交棒曲线），
+本次移植的是我们缺少的四块核心增量，全部纯 DSP / 纯逻辑，无新增依赖：
+
+- **DP 拍点追踪（Ellis 2007 动态规划）**：替代原「固定网格 + 局部吸附」。
+  全局最优拍点序列对速度漂移、渐快渐慢、摇摆节奏鲁棒得多 —— 这是所有过渡级别的基石。
+  拍点置信度改为「onset 显著度 + 拍距规律性」融合（HyPlayer EstimateConfidence）。
+- **低频加权强拍估计**：onset 包络新增 200 Hz 以下低频带，强拍相位按「2×低频 + 全频带」
+  评分选相位（底鼓落在正拍 1 上的远比镲片可靠）。输出绝对 downbeat 时间数组。
+- **Camelot 调性估计与冲突检测**：chroma 能量 + Krumhansl-Schmuckler 相关 → Camelot 轮盘编号；
+  两曲调性距离 > 2 时重叠上限 8 小节（HyPlayer KeyClash），避免长重叠里两首歌互相打架。
+- **半/倍速 2:1 对齐（BestRate）**：100 → 200 BPM 的配对现在按 2:1 拍对齐（rate 保持 1），
+  100 → 50 同理，不再一律退化成交叉淡化。
+- **FilterCut 技术（MixTechnique.FilterCut）**：BPM 差超出变速上限时，改为短重叠（4–8 小节）
+  + 出曲高通 300 Hz → 18 kHz 指数扫频切出 + 入曲正弦淡入，替代原来的「原速硬叠」。
+  渲染层由 bridgeRenderer 在离线混音中插入 BiquadFilter 扫频实现。
+- **4 小节乐句相位退场（ChooseExit）**：过渡起点优先落在与 outro 同乐句相位的强拍上，
+  「在正拍 1 上交棒」。允许最多回退一个乐句。
+
+内部变化：`AnalysisResult` 增加 `key` / `keyConfidence`，`BeatGrid` 增加
+`tailDownbeats` / `headDownbeats`（均可选，旧数据无此字段时自动回退旧算法）；
+`TransitionPlan` 增加 `technique` / `highpassSweep`；旧 B 级（有分轨但不许变速）
+的职责由 FilterCut 接管，变速配对只有 A（分轨人声避让）与 C（歌词时间轴避让）。
+
+验收：`npm run typecheck` 全绿 · `npm test` 94 例（含 11 例移植专项：
+DP 追踪精度 / Camelot 距离 / 倍频对齐 / FilterCut / 乐句相位）·
+`npm run verify` 36 张截图 0 报错。
+
 ## 1.3.5 - 2026-10-25
 
 五项体验修复 + 新功能「随机推荐」。

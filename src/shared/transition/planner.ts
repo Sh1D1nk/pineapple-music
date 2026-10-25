@@ -5,6 +5,8 @@
  * and what keeps a bad plan from ever reaching the speakers: if the numbers cannot work out, it
  * returns a lower level instead of a broken mix.
  */
+import { camelotDistance } from '../dsp/key'
+
 export type TransitionLevel = 'A' | 'B' | 'C' | 'D' | 'E'
 
 export interface Phrase {
@@ -23,6 +25,11 @@ export interface TrackAnalysisLite {
   tailBeats: number[]
   headBeats: number[]
   lufs: number
+  /** Camelot slot (see shared/dsp/key.ts), optional: analysed before v1.3.6 lacks it. */
+  key?: number
+  keyConfidence?: number
+  /** Downbeat times in the tail window (absolute seconds), from the DP tracker. */
+  downbeatTimes?: number[]
 }
 
 export interface PlannerOptions {
@@ -48,6 +55,12 @@ export interface Keyframe {
 
 export interface TransitionPlan {
   level: TransitionLevel
+  /**
+   * Mix technique, ported from HyPlayer's MixTechnique. `beatmix` = the default bar-aligned
+   * bed entry; `filtercut` = the outgoing track is swept out with a high-pass filter (used
+   * when the BPM gap is too wide for a time-stretched blend). Absent = beatmix.
+   */
+  technique?: 'beatmix' | 'filtercut'
   /** Absolute seconds in the current track where the bridge takes over. */
   startTime: number
   /** Absolute seconds in the current track where Deck B takes over. */
@@ -65,6 +78,8 @@ export interface TransitionPlan {
   nextVocalIn: number
   vocalOut: { start: number; end: number } | null
   bassSwapAt: number
+  /** FilterCut only: outgoing-side high-pass sweep, bridge-relative (Hz at start → Hz at end). */
+  highpassSweep?: { fromHz: number; toHz: number } | null
   /** Bridge-relative time where the UI should switch to the next track. */
   uiSwitchAt: number
   /** Beat-phase mismatch at the moment the next bed enters. */
@@ -146,19 +161,59 @@ export function integratedPosition(rate: Keyframe[], t: number, dt = 0.005): num
   return pos
 }
 
+/**
+ * Exit point on a downbeat, preferring a 4-bar phrase boundary (HyPlayer ChooseExit).
+ * `downbeatTimes` (DP tracker) wins when present; otherwise downbeats are derived from
+ * tailBeats + the downbeat phase. The phrase anchor is the *last* downbeat (the outro):
+ * walking candidates backwards from the end, the first one whose global index sits on the
+ * same 4-bar phase as the outro wins — that is what makes the handover feel "on the one".
+ * Returns null when nothing lands before `latest`.
+ */
+function pickPhraseExit(
+  track: TrackAnalysisLite,
+  latest: number,
+  minimum: number
+): { time: number; phraseAligned: boolean } | null {
+  const barSec = track.period * 4
+  const downbeats =
+    track.downbeatTimes && track.downbeatTimes.length >= 4
+      ? track.downbeatTimes
+      : track.tailBeats.filter((_, i) => (i + track.downbeat) % 4 === 0)
+  if (downbeats.length === 0) return null
+  const anchorIndex = downbeats.length - 1
+  const candidates: number[] = []
+  for (const d of downbeats) {
+    if (d > latest + 0.05) continue
+    if (d < minimum) continue
+    candidates.push(d)
+  }
+  if (candidates.length === 0) return null
+  for (let ci = candidates.length - 1; ci >= 0; ci--) {
+    const d = candidates[ci]!
+    const idx = downbeats.indexOf(d)
+    if (((idx - anchorIndex) % 4 + 4) % 4 === 0) return { time: d, phraseAligned: true }
+  }
+  // Fall back to the last candidate that still leaves a full bar before the end.
+  const withRoom = candidates.filter((d) => d + barSec <= latest)
+  if (withRoom.length > 0) return { time: withRoom[withRoom.length - 1]!, phraseAligned: false }
+  return { time: candidates[candidates.length - 1]!, phraseAligned: false }
+}
+
 export function planTransition(
   current: TrackAnalysisLite,
   next: TrackAnalysisLite,
   options: PlannerOptions
 ): TransitionPlan {
   const notes: string[] = []
-  const target = clamp(options.durationSec, 8, 45)
+  let target = clamp(options.durationSec, 8, 45)
   const e1 = current.audioEnd > 0 ? current.audioEnd : current.duration
+  const barSec = current.period * 4
 
   // ---- Level E: a continuous album pair stays gapless, without any processing at all.
   if (options.sameAlbum && options.consecutive && current.duration - e1 < 0.35 && next.audioStart < 0.35) {
     return {
       level: 'E',
+      technique: 'beatmix',
       startTime: e1,
       endTime: e1,
       bridgeDuration: 0,
@@ -170,6 +225,7 @@ export function planTransition(
       nextVocalIn: 0,
       vocalOut: null,
       bassSwapAt: 0,
+      highpassSweep: null,
       uiSwitchAt: 0,
       alignmentErrorMs: 0,
       entryFadeSec: 0.02,
@@ -178,11 +234,35 @@ export function planTransition(
     }
   }
 
+  // Key clash (HyPlayer): two tracks a Camelot distance > 2 apart fight in the overlap,
+  // so cap the blend at 8 bars and get out.
+  const keyDistance = camelotDistance(current.key ?? -1, next.key ?? -1)
+  const keyClash =
+    keyDistance > 2 && (current.keyConfidence ?? 0) > 0.03 && (next.keyConfidence ?? 0) > 0.03
+  if (keyClash) {
+    const cap = Math.max(8 * barSec, 10)
+    if (target > cap) {
+      target = cap
+      notes.push(`调性相冲（Camelot 距离 ${keyDistance}），重叠限 8 小节`)
+    }
+  }
+
   // 0.55 太苛刻：真实歌曲里拍点吸附会有几十毫秒抖动，稳定度算出来常常只有 0.4~0.5，
   // 结果每一首都被判成「拍点不可靠」直接掉到 D 级。改成 0.4，并要求拍点周期在合理区间。
   const beatsUsable =
     current.stability >= 0.4 && next.stability >= 0.4 && current.period > 0.2 && next.period > 0.2
-  const rateRatio = current.period / next.period
+  // Half-/double-time alignment (HyPlayer BestRate): 100 → 200 BPM still mixes 2:1.
+  // Our stretch acts on the outgoing track, so the rate candidates are periodA / (periodB·k).
+  let rateRatio = current.period / next.period
+  let multiplier = 1
+  for (const k of [1, 2, 0.5]) {
+    const r = current.period / (next.period * k)
+    if (Math.abs(r - 1) < Math.abs(rateRatio - 1)) {
+      rateRatio = r
+      multiplier = k
+    }
+  }
+  if (multiplier !== 1) notes.push(`按 ${multiplier === 2 ? '对半' : '倍频'}拍对齐（2:1）`)
   const rateExcess = Math.abs(rateRatio - 1)
   const maxRate = clamp(options.maxRatePct, 1, 12) / 100
   // Both periods come from a tempo estimate with a few tenths of a percent of error, so the cap
@@ -198,6 +278,7 @@ export function planTransition(
     notes.push('拍点不可靠，降级为基础交叉淡化')
     return {
       level: 'D',
+      technique: 'beatmix',
       startTime,
       endTime: e1,
       bridgeDuration: fade,
@@ -209,6 +290,7 @@ export function planTransition(
       nextVocalIn: 0,
       vocalOut: null,
       bassSwapAt: fade * 0.45,
+      highpassSweep: null,
       uiSwitchAt: startTime + fade * 0.5,
       alignmentErrorMs: 0,
       entryFadeSec: 0.35,
@@ -217,17 +299,55 @@ export function planTransition(
     }
   }
 
-  // ---- Where can the bridge start?  Always on a bar line, always before the effective end.
-  const tailBeats = current.tailBeats.length > 0 ? current.tailBeats : []
-  const barSec = current.period * 4
-  let startTime = e1 - target
-  if (tailBeats.length >= 4) {
-    // snap to a downbeat (every 4th beat starting from the known downbeat index)
-    const downbeats = tailBeats.filter((_, i) => (i + current.downbeat) % 4 === 0)
-    const candidates = (downbeats.length > 0 ? downbeats : tailBeats).filter((t) => t <= startTime + 0.35)
-    const snapped = candidates[candidates.length - 1]
-    if (snapped !== undefined && startTime - snapped < barSec) startTime = snapped
+  // ---- FilterCut (HyPlayer MixTechnique.FilterCut): the BPM gap is too wide to stretch,
+  // so blend over a few bars while sweeping the outgoing track out with a high-pass filter.
+  if (!rateAllowed) {
+    const bars = Math.max(4, Math.min(8, Math.floor(target / barSec)))
+    const overlap = bars * barSec
+    const latest = e1 - Math.max(0, overlap * 0.25)
+    const exit = pickPhraseExit(current, latest, Math.max(0, e1 - 45))
+    const startTime = exit ? exit.time : Math.max(0, e1 - overlap)
+    const bridgeDuration = Math.max(2, e1 - startTime)
+    const currentGain: Keyframe[] = [
+      { at: 0, value: 1 },
+      { at: round3(bridgeDuration * 0.7), value: 1 },
+      { at: round3(bridgeDuration), value: 0 }
+    ]
+    const nextGain: Keyframe[] = [
+      { at: 0, value: 0 },
+      { at: round3(bridgeDuration * 0.5), value: 0 },
+      { at: round3(bridgeDuration), value: round4(gainForLoudness(current, next)) }
+    ]
+    notes.push(`BPM 差 ${Math.round(rateExcess * 1000) / 10}% 超限，高通扫频切出（${bars} 小节）`)
+    return {
+      level: 'C',
+      technique: 'filtercut',
+      startTime: round3(startTime),
+      endTime: round3(e1),
+      bridgeDuration: round3(bridgeDuration),
+      nextStartOffset: 0,
+      rate: [{ at: 0, value: 1 }],
+      currentGain,
+      nextGain,
+      nextBedIn: 0,
+      nextVocalIn: 0,
+      vocalOut: null,
+      bassSwapAt: 0,
+      highpassSweep: { fromHz: 300, toHz: 18000 },
+      uiSwitchAt: round3(startTime + bridgeDuration * 0.5),
+      alignmentErrorMs: 0,
+      entryFadeSec: 0.35,
+      exitFadeSec: 0.35,
+      notes
+    }
   }
+
+  // ---- Where can the bridge start?  Always on a downbeat (4-bar phrase if possible),
+  // always before the effective end. Walking back up to one full phrase (4 bars) to hit
+  // the right phase is fine — that is exactly what makes the handover feel "on the one".
+  let startTime = e1 - target
+  const exit = pickPhraseExit(current, startTime + barSec, Math.max(0, e1 - 45))
+  if (exit && startTime - exit.time <= 4 * barSec && e1 - exit.time <= 45) startTime = exit.time
 
   // ---- Protect the last vocal phrase: the bridge may not begin before it is over.
   if (options.protectLastPhrase && options.currentPhrases.length > 0) {
@@ -257,6 +377,8 @@ export function planTransition(
           nextVocalIn: 0,
           vocalOut: null,
           bassSwapAt: (e1 - s) * 0.45,
+          highpassSweep: null,
+          technique: 'beatmix',
           uiSwitchAt: s + (e1 - s) * 0.5,
           alignmentErrorMs: 0,
           entryFadeSec: 0.35,
@@ -287,6 +409,8 @@ export function planTransition(
       nextVocalIn: 0,
       vocalOut: null,
       bassSwapAt: (e1 - s) * 0.45,
+      highpassSweep: null,
+      technique: 'beatmix',
       uiSwitchAt: s + (e1 - s) * 0.5,
       alignmentErrorMs: 0,
       entryFadeSec: 0.35,
@@ -296,14 +420,13 @@ export function planTransition(
   }
   bridgeDuration = clamp(bridgeDuration, 8, 45)
 
+  // BPM 太宽的配对已经在上面走了 FilterCut，所以这里 rateAllowed 恒为真：
+  // A 级 = 有分轨（人声先退 + 变速对齐），C 级 = 无分轨的同款规划（人声改用歌词时间轴）。
+  // 旧版 B 级（有分轨但不许变速）的职责由 FilterCut 接管。
   const stems = options.stemsReady
-  const level: TransitionLevel = stems ? (rateAllowed ? 'A' : 'B') : 'C'
-  if (stems && !rateAllowed) notes.push('变速幅度超限或速度不稳，保持原速')
-  else if (rateAllowed && rateExcess > maxRate) notes.push('按估算误差容差放行变速')
-  if (!stems) {
-    notes.push('分轨未就绪，整曲节拍对齐混音')
-    if (!rateAllowed) notes.push('BPM 超限，不做变速')
-  }
+  const level: TransitionLevel = stems ? 'A' : 'C'
+  if (rateAllowed && rateExcess > maxRate) notes.push('按估算误差容差放行变速')
+  if (!stems) notes.push('分轨未就绪，整曲节拍对齐混音')
 
   // ---- Vocal exit inside the first 40% of the window.
   let vocalOut: { start: number; end: number } | null = null
@@ -348,7 +471,9 @@ export function planTransition(
   const currentPhase = (startTime + currentPhaseTime) / current.period
   const anchor2 = next.headBeats.length > 0 ? next.headBeats[0]! : next.audioStart
   const wantPhase = currentPhase - Math.floor(currentPhase)
-  const phaseBase = anchor2 + wantPhase * next.period
+  // Half/double-time pairs: one outgoing beat spans `multiplier` beats of the next track,
+  // so the phase maps onto the next grid scaled by that factor.
+  const phaseBase = anchor2 + wantPhase * multiplier * next.period
   const bar = next.period * 4
   const maxSkip = 8 * bar
   // Choose the whole-bar multiple that puts the entry inside the allowed intro window. Because we
@@ -403,6 +528,7 @@ export function planTransition(
 
   return {
     level,
+    technique: 'beatmix',
     startTime: round3(startTime),
     endTime: round3(e1),
     bridgeDuration: round3(bridgeDuration),
@@ -414,6 +540,7 @@ export function planTransition(
     nextVocalIn: round3(nextVocalIn),
     vocalOut,
     bassSwapAt,
+    highpassSweep: null,
     uiSwitchAt,
     alignmentErrorMs: Math.round(alignmentErrorMs * 100) / 100,
     entryFadeSec: 0.35,

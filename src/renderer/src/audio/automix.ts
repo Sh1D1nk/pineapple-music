@@ -76,7 +76,10 @@ export function buildPlan(current: SongMeta, next: SongMeta, options: PlannerOpt
       downbeat: a.grid.downbeat,
       tailBeats: a.grid.tail,
       headBeats: a.grid.head,
-      lufs: a.lufs
+      lufs: a.lufs,
+      key: a.key,
+      keyConfidence: a.keyConfidence,
+      downbeatTimes: a.grid.tailDownbeats
     },
     {
       duration: next.durationSec,
@@ -88,7 +91,10 @@ export function buildPlan(current: SongMeta, next: SongMeta, options: PlannerOpt
       downbeat: b.grid.downbeat,
       tailBeats: b.grid.tail,
       headBeats: b.grid.head,
-      lufs: b.lufs
+      lufs: b.lufs,
+      key: b.key,
+      keyConfidence: b.keyConfidence,
+      downbeatTimes: b.grid.tailDownbeats
     },
     options
   )

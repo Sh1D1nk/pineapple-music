@@ -84,6 +84,19 @@ export async function renderBridge(
   currentHigh.connect(currentGain)
   currentGain.connect(master)
 
+  // FilterCut (HyPlayer): sweep the outgoing track out with a high-pass filter.
+  // 300 Hz → 18 kHz exponential matches HyPlayer's 300·60^x sweep exactly.
+  let currentTail: AudioNode = currentHigh
+  if (plan.technique === 'filtercut' && plan.highpassSweep) {
+    const hp = ctx.createBiquadFilter()
+    hp.type = 'highpass'
+    hp.Q.value = 0.7071
+    hp.frequency.setValueAtTime(plan.highpassSweep.fromHz, 0)
+    hp.frequency.exponentialRampToValueAtTime(plan.highpassSweep.toHz, Math.max(0.01, plan.bridgeDuration))
+    hp.connect(currentHigh)
+    currentTail = hp
+  }
+
   let stretched = false
   try {
     const stretch = (await SignalsmithStretch(ctx, {
@@ -103,13 +116,13 @@ export async function renderBridge(
       stretch.schedule({ output: point.at, rate: point.value })
       lastAt = point.at
     }
-    stretch.connect(currentHigh)
+    stretch.connect(currentTail)
     stretched = true
   } catch (err) {
     console.warn('[bridge] stretch unavailable, rendering at original speed:', String(err))
     const plain = ctx.createBufferSource()
     plain.buffer = currentBuffer
-    plain.connect(currentHigh)
+    plain.connect(currentTail)
     plain.start(0)
   }
 

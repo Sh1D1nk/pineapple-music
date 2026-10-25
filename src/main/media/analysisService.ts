@@ -132,13 +132,17 @@ export class AnalysisService extends EventEmitter {
       head: result.headBeats.filter((t) => t < 32),
       period: result.period,
       stability: result.stability,
-      downbeat: result.downbeat
+      downbeat: result.downbeat,
+      tailDownbeats: result.tailDownbeats.filter((t) => t > audioEnd - 50),
+      headDownbeats: result.headDownbeats.filter((t) => t < 32)
     }
     return {
       bpm: result.bpm,
       bpmConfidence: result.bpmConfidence,
       bpmCandidates: result.bpmCandidates,
       grid,
+      key: result.key,
+      keyConfidence: result.keyConfidence,
       lufs: dynamics.lufs,
       leadSilence: dynamics.leadSilence,
       tailSilence: Math.max(0, duration - audioEnd),

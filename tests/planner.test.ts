@@ -95,13 +95,16 @@ describe('TransitionPlanner', () => {
     expect(plan.alignmentErrorMs).toBeLessThan(20)
   })
 
-  it('drops to B when the tempo gap exceeds the allowed range', () => {
+  it('uses a high-pass filter cut when the tempo gap exceeds the allowed range', () => {
     const current = track({ bpm: 100, period: 0.6 })
     const next = track({ bpm: 130, period: 60 / 130 })
     const plan = planTransition(current, next, options({ stemsReady: true, maxRatePct: 8 }))
-    expect(plan.level).toBe('B')
+    expect(plan.level).toBe('C')
+    expect(plan.technique).toBe('filtercut')
+    expect(plan.highpassSweep).toEqual({ fromHz: 300, toHz: 18000 })
     expect(plan.rate.at(-1)!.value).toBe(1)
-    expect(plan.notes.join()).toContain('保持原速')
+    expect(plan.bridgeDuration).toBeLessThanOrEqual(8 * 2 + 0.5)
+    expect(plan.notes.join()).toContain('高通扫频')
   })
 
   it('drops to D when the beat grid is unreliable', () => {

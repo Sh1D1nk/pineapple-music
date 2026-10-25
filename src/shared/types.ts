@@ -35,6 +35,10 @@ export interface BeatGrid {
   stability: number;
   /** 0..3, which beat of the bar is the downbeat. */
   downbeat: number;
+  /** Downbeat times inside the tail window (absolute seconds), from the DP tracker. */
+  tailDownbeats?: number[];
+  /** Downbeat times inside the head window (absolute seconds), from the DP tracker. */
+  headDownbeats?: number[];
 }
 
 export interface AnalysisResult {
@@ -42,6 +46,12 @@ export interface AnalysisResult {
   bpmConfidence: number;
   bpmCandidates: number[];
   grid: BeatGrid;
+  /**
+   * Camelot slot 0..23 (0..11 = major wheels 1B..12B, 12..23 = minor wheels 1A..12A),
+   * -1 = unknown. Optional: tracks analysed before v1.3.6 do not carry it.
+   */
+  key?: number;
+  keyConfidence?: number;
   lufs: number;
   leadSilence: number;
   tailSilence: number;
