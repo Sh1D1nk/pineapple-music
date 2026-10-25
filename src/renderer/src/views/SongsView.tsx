@@ -1,5 +1,5 @@
 import { useMemo, useState, type JSX } from 'react'
-import { useStore } from '../state/store'
+import { useStore, useCurrentSongId, useIsPlaying } from '../state/store'
 import { TrackTable, type SortKey } from '../components/TrackTable'
 import { formatCount, formatDurationLabel } from '../lib/format'
 import { Icon } from '../components/Icon'
@@ -9,7 +9,6 @@ export function SongsView(): JSX.Element {
   const songs = useStore((s) => s.songs)
   const songIds = useStore((s) => s.songIds)
   const playSongs = useStore((s) => s.playSongs)
-  const playback = useStore((s) => s.playback)
   const setContextMenu = useStore((s) => s.setContextMenu)
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'added', dir: 'desc' })
 
@@ -35,7 +34,8 @@ export function SongsView(): JSX.Element {
   }, [songIds, songs, sort])
 
   const totalDuration = useMemo(() => list.reduce((sum, s) => sum + s.durationSec, 0), [list])
-  const current = playback.queue[playback.index]?.songId ?? null
+  const current = useCurrentSongId()
+  const playing = useIsPlaying()
 
   return (
     <div className={styles.page}>
@@ -61,7 +61,7 @@ export function SongsView(): JSX.Element {
       <TrackTable
         songs={list}
         currentId={current}
-        playing={playback.playing}
+        playing={playing}
         sortable
         sort={sort}
         onSort={(key) =>

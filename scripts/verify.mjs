@@ -192,6 +192,20 @@ await shot('17-lyrics-panel-dark')
 await page.locator('button[title="打开全屏正在播放"]').first().click()
 await page.waitForTimeout(1300)
 await shot('18-fullscreen-lyrics-dark')
+
+// 歌词页右键菜单与页内设置窗（对齐汽水 AMLL 插件的交互层）
+await page.mouse.click(420, 300, { button: 'right' })
+await page.waitForTimeout(450)
+await shot('18b-lyrics-menu-dark')
+await page.locator('[class*="lyricsMenu"] button', { hasText: '歌词页设置' }).first().click()
+// 设置窗带 backdrop-filter，开窗那一帧的合成层可能还没稳定；多等一帧再截
+await page.waitForTimeout(900)
+await shot('18c-lyrics-settings-dark')
+await page.locator('[class*="lsSideItem"]', { hasText: '背景' }).first().click()
+await page.waitForTimeout(350)
+await shot('18d-lyrics-settings-bg-dark')
+await page.keyboard.press('Escape')
+await page.waitForTimeout(400)
 await page.keyboard.press('Escape')
 await page.waitForTimeout(700)
 

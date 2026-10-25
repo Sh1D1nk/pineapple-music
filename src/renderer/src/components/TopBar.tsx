@@ -177,7 +177,12 @@ function NowPlayingPill(): JSX.Element {
           {settings.barStyle === 'blur' && song.coverId && (
             <span
               className={styles.coverTint}
-              style={{ backgroundImage: `url(${coverUrl(song.coverId, 240)})`, opacity: settings.barCover }}
+              // 封面只作「环境色」：模糊后压到 ~22%，边缘由胶囊自己裁掉，
+              // 看上去是玻璃里透出的一点颜色，而不是一张图片。
+              style={{
+                backgroundImage: `url(${coverUrl(song.coverId, 240)})`,
+                opacity: settings.barCover * 0.5
+              }}
               aria-hidden="true"
             />
           )}

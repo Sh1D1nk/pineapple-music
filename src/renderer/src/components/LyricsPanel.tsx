@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import { BackgroundRender } from '@applemusic-like-lyrics/react'
-import { useStore } from '../state/store'
+import { useStore, useCurrentSongId, useIsPlaying } from '../state/store'
 import { coverUrl } from '../bridge'
 import { Cover } from './Cover'
 import { LyricsView, withDisplayOptions } from './LyricsView'
@@ -11,7 +11,6 @@ export function LyricsPanel(): JSX.Element {
   const open = useStore((s) => s.lyricsOpen)
   const lyrics = useStore((s) => s.lyrics)
   const settings = useStore((s) => s.settings)
-  const playback = useStore((s) => s.playback)
   const songs = useStore((s) => s.songs)
   const seek = useStore((s) => s.seek)
 
@@ -27,7 +26,9 @@ export function LyricsPanel(): JSX.Element {
     return () => window.clearTimeout(timer)
   }, [open])
 
-  const song = songs[playback.queue[playback.index]?.songId ?? '']
+  const currentId = useCurrentSongId()
+  const playing = useIsPlaying()
+  const song = currentId ? songs[currentId] : undefined
   const albumArt = coverUrl(song?.coverId ?? null, 640)
 
   const lines = useMemo(() => {
@@ -46,6 +47,7 @@ export function LyricsPanel(): JSX.Element {
     <div
       className={`${styles.panel} ${styles.lyricsPanel} ${open ? styles.panelOpen : ''}`}
       aria-hidden={!open}
+      inert={!open}
       style={{ pointerEvents: open ? 'auto' : 'none' }}
     >
       {mounted && (
@@ -62,7 +64,7 @@ export function LyricsPanel(): JSX.Element {
         <div className={styles.lyricsBg} style={{ '--lyrics-bg-filter': bgFilter } as React.CSSProperties}>
           <BackgroundRender
             album={albumArt ?? undefined}
-            playing={playback.playing}
+            playing={playing}
             fps={fps}
             flowSpeed={settings.bgFlowSpeed}
             hasLyric={lines.length > 0}
@@ -98,7 +100,7 @@ export function LyricsPanel(): JSX.Element {
           {lyrics && lyrics.kind === 'synced' && lines.length > 0 ? (
             <LyricsView
               lines={lines}
-              playing={playback.playing}
+              playing={playing}
               offsetMs={settings.lyricOffsetMs}
               fontSize={28 * settings.lyricFontScale}
               weight={settings.lyricWeight}

@@ -50,7 +50,9 @@ export const bridge = {
   openPath: (path: string) => invoke<void>('app/openPath', path),
   openUserData: () => invoke<void>('app/openUserData'),
   setFullScreen: (value: boolean) => invoke<void>('window/setFullScreen', value),
+  isFullScreen: () => invoke<boolean>('window/isFullScreen'),
   gpu: () => invoke<{ accelerated: boolean; renderer: string }>('app/gpu'),
+  version: () => invoke<string>('app/version'),
   stems: {
     status: () =>
       invoke<{

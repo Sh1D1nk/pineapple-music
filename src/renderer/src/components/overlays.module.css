@@ -297,37 +297,6 @@
 }
 
 /* 全屏右上角的两个入口：与关闭条同一套玻璃语言，尺寸更小 */
-.fsCorner {
-  position: absolute;
-  top: 18px;
-  right: 22px;
-  z-index: 3;
-  display: flex;
-  gap: 8px;
-}
-
-.fsCornerButton {
-  width: 38px;
-  height: 38px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(14px) saturate(1.6);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
-  transition: background 0.2s ease, transform 0.18s cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-.fsCornerButton:hover {
-  background: rgba(255, 255, 255, 0.26);
-}
-
-.fsCornerButton:active {
-  transform: scale(0.92);
-}
-
 /* 关闭条：悬停时由横杠变成圆角方块并浮出 X */
 .fsClose {
   position: relative;
@@ -340,7 +309,8 @@
   padding: 0;
   border: 0;
   background: transparent;
-  cursor: pointer;
+  /* 插件在这里隐藏指针：横杠会变成方块并跟着鼠标走，指针本身是多余的 */
+  cursor: none;
   touch-action: none;
   transition: transform 0.22s cubic-bezier(0.22, 1.2, 0.36, 1);
 }
@@ -627,6 +597,26 @@
   opacity: 0.55;
 }
 
+/* 左侧图标现在是静音按钮：给回可点击的手感与悬停反馈 */
+button.fsVicon {
+  width: clamp(13px, 1.8vh, 20px);
+  height: clamp(13px, 1.8vh, 20px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity var(--dur) var(--ease);
+}
+
+button.fsVicon:hover {
+  opacity: 0.85;
+}
+
+/* 歌词行可点跳转，指针要说明这一点 */
+.fsLyric [class*='lyricLineWrapper'] {
+  cursor: pointer;
+}
+
 .fsVolumeTrack {
   position: relative;
   flex: 1 1 auto;
@@ -662,8 +652,8 @@
     opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 2%, #000 12%, #000 88%, transparent 98%);
-  mask-image: linear-gradient(to bottom, transparent 2%, #000 12%, #000 88%, transparent 98%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 2%, #000 14%, #000 86%, transparent 98%);
+  mask-image: linear-gradient(to bottom, transparent 2%, #000 14%, #000 86%, transparent 98%);
 }
 
 .fsEmpty {
@@ -1008,6 +998,439 @@
   padding: 3px 8px;
   border-radius: 7px;
   pointer-events: none;
+}
+
+/* ------------------------------------------------- 歌词页右键菜单（插件同款） */
+
+.lyricsMenu {
+  position: fixed;
+  z-index: 80;
+  min-width: 196px;
+  max-width: min(440px, 72vw);
+  /* 行高压到 20px（插件是 22px）：11 项菜单整体从 ~340px 降到 ~250px */
+  padding: 2px 0;
+  border-radius: 9px;
+  overflow: hidden;
+  color: #fff;
+  font-size: 12.5px;
+  line-height: 17px;
+  background: rgba(26, 28, 26, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(36px) saturate(1.6);
+  -webkit-backdrop-filter: blur(36px) saturate(1.6);
+  animation: lyricsMenuIn 120ms var(--ease);
+}
+
+@keyframes lyricsMenuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.lyricsMenuGroup {
+  padding: 3px 0;
+}
+
+.lyricsMenuGroup + .lyricsMenuGroup {
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.lyricsMenuRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  height: 20px;
+  padding: 0 12px 0 7px;
+  text-align: left;
+  white-space: nowrap;
+  color: inherit;
+}
+
+.lyricsMenuRow:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.lyricsMenuRow:disabled {
+  opacity: 0.4;
+}
+
+.lyricsMenuDanger {
+  color: #ff9a9a;
+}
+
+.lyricsMenuDanger:hover:not(:disabled) {
+  background: rgba(255, 80, 80, 0.24);
+}
+
+.lyricsMenuTick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex: 0 0 auto;
+}
+
+.lyricsMenuLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------- 歌词页内设置窗（插件同款） */
+
+.lsScrim {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.32);
+  animation: fadeIn 180ms var(--ease);
+}
+
+.lsWindow {
+  position: relative;
+  width: min(680px, 62vw);
+  height: min(440px, 60vh);
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+  color: #fff;
+  background: rgba(32, 32, 34, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(40px) saturate(1.7);
+  -webkit-backdrop-filter: blur(40px) saturate(1.7);
+  animation: lsWindowIn 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes lsWindowIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.lsTitlebar {
+  position: relative;
+  flex: 0 0 auto;
+  height: 40px;
+  display: flex;
+  align-items: center;
+}
+
+.lsLights {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 8px;
+}
+
+.lsLight {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.lsLightClose {
+  background: #ff5f57;
+}
+
+.lsLightDim {
+  background: #febc2e;
+  opacity: 0.5;
+}
+
+.lsLightGhost {
+  background: #28c840;
+  opacity: 0.5;
+}
+
+.lsTitle {
+  margin: 0 30px 0 68px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lsBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.lsSide {
+  flex: 0 0 176px;
+  display: flex;
+  flex-direction: column;
+  padding: 0 9px 12px;
+  overflow: auto;
+}
+
+.lsSideItem {
+  font-size: 13.5px;
+  line-height: 18px;
+  padding: 5px 11px;
+  border-radius: 6px;
+  text-align: left;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.lsSideItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.lsSideOn {
+  background: rgba(10, 130, 255, 0.75);
+  color: #fff;
+}
+
+.lsSideFoot {
+  margin-top: auto;
+  padding: 10px 11px 2px;
+  font-size: 12.5px;
+  text-align: left;
+  color: #4da3ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lsSideFoot:hover {
+  color: #7bbaff;
+}
+
+.lsVdiv {
+  width: 1px;
+  min-width: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.lsPane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background: rgba(20, 20, 20, 0.6);
+  padding: 12px 14px 16px;
+}
+
+.lsPaneTitle {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 2px 0 14px;
+}
+
+.lsBox {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin-bottom: 8px;
+}
+
+.lsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 7px 0;
+  min-height: 28px;
+}
+
+.lsRow + .lsRow {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.lsRowLabel {
+  min-width: 0;
+}
+
+.lsRowLabel b {
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.lsRowLabel span {
+  display: block;
+  font-size: 11.3px;
+  opacity: 0.5;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.lsCtl {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lsSwitch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 17px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: background var(--dur) var(--ease);
+}
+
+.lsSwitchOn {
+  background: var(--accent);
+}
+
+.lsKnob {
+  position: absolute;
+  top: 1.5px;
+  left: 1.5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  transition: transform var(--dur) cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.lsSwitchOn .lsKnob {
+  transform: translateX(13px);
+}
+
+.lsSlider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 148px;
+  height: 6px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.18);
+  outline: none;
+  cursor: pointer;
+}
+
+.lsSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.lsVal {
+  font-size: 12px;
+  opacity: 0.6;
+  min-width: 52px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.lsSeg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.lsSegBtn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.lsSegBtn:hover {
+  color: #fff;
+}
+
+.lsSegOn {
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-weight: 600;
+}
+
+.lsNote {
+  font-size: 12px;
+  line-height: 1.6;
+  opacity: 0.55;
+  padding: 4px 2px 2px;
+}
+
+.lsKv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  font-size: 12.5px;
+  align-items: baseline;
+}
+
+.lsKv b {
+  font-weight: 400;
+  opacity: 0.55;
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.lsKv span {
+  font-family: 'Fira Code', Consolas, monospace;
+  font-size: 11.5px;
+  word-break: break-all;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 2px 7px;
+}
+
+.lsAbout h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.lsAbout p {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  opacity: 0.7;
+}
+
+.lsReset {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
+}
+
+.lsResetButton {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.lsResetButton:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 /* 关闭条：悬停展开成圆角方块并浮出 X（用 data 属性切换，避免 CSS Module 类名被 hash） */

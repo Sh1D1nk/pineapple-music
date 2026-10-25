@@ -4,6 +4,43 @@
   box-sizing: border-box;
 }
 
+/* 苹方按字重映射到本机不同 face：插件的 SA PingFang 就是为这一点存在的，
+   否则 600/700 会由浏览器合成加粗，歌词笔画会发糊。 */
+@font-face {
+  font-family: 'SA PingFang';
+  src: local('PingFang SC Light');
+  font-weight: 300;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SA PingFang';
+  src: local('PingFang SC Regular');
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SA PingFang';
+  src: local('PingFang SC Medium');
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SA PingFang';
+  src: local('PingFang SC Bold');
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SA PingFang';
+  src: local('PingFang SC Bold');
+  font-weight: 700;
+  font-display: swap;
+}
+
 html,
 body,
 #root {
@@ -116,7 +153,11 @@ a {
   position: relative;
   height: 100%;
   width: 100%;
-  overflow: hidden;
+  /* clip 而不是 hidden：hidden 仍然允许「程序化滚动」，而面板与全屏页是靠 transform
+     停在视口外的（面板右移 400px、全屏页下移 100%），它们会把 .app 的滚动区撑大；
+     一旦有元素拿到焦点，浏览器就会滚动最近的滚动容器，整个浮动层（顶栏）随之漂移，
+     表现为「顶栏按钮点不到」。clip 直接禁止任何滚动，几何上就漂不起来了。 */
+  overflow: clip;
   background: var(--bg-content);
 }
 
@@ -336,9 +377,9 @@ a {
   }
 }
 
-/* View Transitions 的快照不能被入场动画干扰：拍快照时把页内动画全部停掉 */
-html[data-vt='1'] .page,
-html[data-vt='1'] .card,
+/* View Transitions 的快照不能被入场动画干扰。
+   .page / .card 是 CSS Module 哈希类名，只能在该模块文件里用 :global() 命中，
+   这里仅处理全局的 .viewSwap。 */
 html[data-vt='1'] .viewSwap {
   animation: none !important;
 }

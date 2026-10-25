@@ -30,10 +30,13 @@ export function FullscreenPlayer(): JSX.Element {
   const setVolume = useStore((s) => s.setVolume)
   const toggleShuffle = useStore((s) => s.toggleShuffle)
   const cycleRepeat = useStore((s) => s.cycleRepeat)
-  const setInfoSongId = useStore((s) => s.setInfoSongId)
   const setCoverFlowOpen = useStore((s) => s.setCoverFlowOpen)
-  const setLyricsOpen = useStore((s) => s.setLyricsOpen)
   const setQueueOpen = useStore((s) => s.setQueueOpen)
+  const setLyricsMenu = useStore((s) => s.setLyricsMenu)
+  const setLyricsQualityLevel = useStore((s) => s.setLyricsQualityLevel)
+  const qualityLevel = useStore((s) => s.lyricsQualityLevel)
+  const toggleMute = useStore((s) => s.toggleMute)
+  const pushToast = useStore((s) => s.pushToast)
   const shuffle = useStore((s) => s.playback.shuffle)
   const repeat = useStore((s) => s.playback.repeat)
 
@@ -41,8 +44,8 @@ export function FullscreenPlayer(): JSX.Element {
   /** 上一首/下一首/播放的按压动画（对齐插件的 saPushL/R/C） */
   const [push, setPush] = useState<'l' | 'r' | 'c' | null>(null)
   const [fpsValue, setFps] = useState(0)
-  /** 自适应画质对渲染精度的缩放系数（1 = 用户设定值，0.2 = 最低） */
-  const [adaptiveScale, setAdaptiveScale] = useState(1)
+  /** 自适应档位的锁存状态：level + 连续低/高帧计数 + 上次变更时间 */
+  const aqRef = useRef({ level: 0, bad: 0, good: 0, stepAt: 0 })
   const closeRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (open) {
@@ -121,36 +124,79 @@ export function FullscreenPlayer(): JSX.Element {
   }
 
   // 实时帧率（插件右上角的 FPS 指示）。
-  // 同时作为「自适应画质」的输入：低帧时自动下调背景渲染精度，回升后缓慢恢复。
+  // 同时驱动「自适应降质」：插件是 4 档阶梯，连续两次低帧降一档、连续八次高帧升一档，
+  // 两次变更之间至少隔 10 秒，45–57fps 是死区 —— 不做这套锁存就会在两档之间来回抖。
+  useEffect(() => {
+    if (!settings.adaptiveQuality && qualityLevel !== 0) {
+      aqRef.current = { ...aqRef.current, level: 0, bad: 0, good: 0 }
+      setLyricsQualityLevel(0)
+    }
+  }, [settings.adaptiveQuality, qualityLevel, setLyricsQualityLevel])
+
   useEffect(() => {
     if (!settings.showFps && !settings.adaptiveQuality) return undefined
     let raf = 0
     let last = performance.now()
-    let frames = 0
-    let acc = 0
+    let fpsAcc = 0
+    let fpsFrames = 0
+    let aqAcc = 0
+    let aqFrames = 0
+    const step = (level: number, now: number): void => {
+      aqRef.current = { level, bad: 0, good: 0, stepAt: now }
+      setLyricsQualityLevel(level)
+      pushToast(level ? `已自动降低特效（档位 ${level} / 3）` : '已恢复完整特效')
+    }
     const loop = (now: number): void => {
-      acc += now - last
+      const dt = now - last
       last = now
-      frames += 1
-      if (acc >= 500) {
-        const value = Math.round((frames * 1000) / acc)
-        setFps(value)
-        if (settings.adaptiveQuality) {
-          setAdaptiveScale((prev) => {
-            // 连续低帧就降精度；帧率恢复后缓慢回升，避免来回抖动
-            if (value < 24) return Math.max(0.2, prev - 0.1)
-            if (value > 50) return Math.min(1, prev + 0.05)
-            return prev
-          })
+      fpsAcc += dt
+      fpsFrames += 1
+      aqAcc += dt
+      aqFrames += 1
+      if (fpsAcc >= 500) {
+        if (settings.showFps) setFps(Math.round((fpsFrames * 1000) / fpsAcc))
+        fpsAcc = 0
+        fpsFrames = 0
+      }
+      // 窗口不可见时的 rAF 会被节流，样本必须丢弃，否则「最小化」会被误判成慢机器
+      if (document.hidden) {
+        aqAcc = 0
+        aqFrames = 0
+      } else if (settings.adaptiveQuality && aqAcc >= 1000) {
+        const fps = (aqFrames * 1000) / aqAcc
+        aqAcc = 0
+        aqFrames = 0
+        const aq = aqRef.current
+        if (now - aq.stepAt >= 10000) {
+          if (fps < 45) {
+            aq.bad += 1
+            aq.good = 0
+            if (aq.bad >= 2 && aq.level < 3) step(aq.level + 1, now)
+          } else if (fps > 57) {
+            aq.good += 1
+            aq.bad = 0
+            if (aq.good >= 8 && aq.level > 0) step(aq.level - 1, now)
+          } else {
+            aq.bad = 0
+            aq.good = 0
+          }
         }
-        acc = 0
-        frames = 0
       }
       raf = window.requestAnimationFrame(loop)
     }
     raf = window.requestAnimationFrame(loop)
     return () => window.cancelAnimationFrame(raf)
-  }, [settings.showFps, settings.adaptiveQuality])
+  }, [settings.showFps, settings.adaptiveQuality, setLyricsQualityLevel, pushToast])
+
+  // 关闭条只在挂载时绑定一次。
+  // 之前是写在 ref 回调里（内联箭头每次渲染都是新函数 → React 每次渲染都重新挂载 ref），
+  // 而播放进度每 100ms 就会触发一次渲染，监听器于是以每秒几十个的速度堆积。
+  useEffect(() => {
+    if (!mounted) return
+    bindClose(closeRef.current)
+    // bindClose 只用 el 自身，不依赖任何 props/state
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted])
 
   const seekFrom = (clientX: number): void => {
     const el = trackRef.current
@@ -159,10 +205,39 @@ export function FullscreenPlayer(): JSX.Element {
     seek(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * duration)
   }
 
+  // 与插件 aqFactors() 同一张阶梯：档位只乘在用户设定值上，不会把「静态」解冻，
+  // 也不会突破性能模式自己设的天花板。
+  const aq =
+    qualityLevel >= 3
+      ? { fps: 0.35, scale: 0.6, lyricLite: true }
+      : qualityLevel === 2
+        ? { fps: 0.35, scale: 0.6, lyricLite: false }
+        : qualityLevel === 1
+          ? { fps: 0.6, scale: 0.8, lyricLite: false }
+          : { fps: 1, scale: 1, lyricLite: false }
+  const bgPerf = settings.bgPerf
+  const baseFps = settings.bgFps > 0 ? settings.bgFps : 30
+  const effectiveFps = Math.max(8, Math.round((bgPerf ? Math.min(baseFps, 24) : baseFps) * aq.fps))
+  const effectiveScale = Math.max(
+    0.2,
+    Math.min(1, (bgPerf ? Math.min(settings.bgRenderScale, 0.35) : settings.bgRenderScale) * aq.scale)
+  )
+  // 性能模式与最低档都关掉逐行的模糊/缩放遮罩：这是集成显卡上最后一块可省的开销
+  const lyricLite = bgPerf || aq.lyricLite
+
   return (
     <div
       className={`${styles.fullscreen} ${open ? styles.fullscreenOpen : ''} ${hasLyrics ? '' : styles.fsNoLyric}`}
       aria-hidden={!open}
+      // 关闭态整页不可聚焦：否则 Tab 或残留焦点会把「停在视口外」的按钮滚进视野，
+      // 连带把整个浮动层（含顶栏）顶出屏幕。
+      inert={!open}
+      onContextMenu={(event) => {
+        // 整页右键菜单；命中歌词行时由行处理器先 stopPropagation
+        if (!open) return
+        event.preventDefault()
+        setLyricsMenu({ x: event.clientX, y: event.clientY, kind: 'page' })
+      }}
     >
       {mounted && song && albumArt && settings.bgEnabled && settings.bgType === 'flow' ? (
         <div
@@ -172,12 +247,10 @@ export function FullscreenPlayer(): JSX.Element {
           <BackgroundRender
             album={albumArt}
             playing={playback.playing}
-            fps={
-              settings.bgPerf ? 15 : Math.max(10, Math.round(settings.bgFps * adaptiveScale))
-            }
+            fps={effectiveFps}
             flowSpeed={settings.bgFlowSpeed}
             hasLyric={hasLyrics}
-            renderScale={Math.max(0.2, settings.bgRenderScale * adaptiveScale)}
+            renderScale={effectiveScale}
             staticMode={settings.bgPerf || settings.bgFps === 0}
             style={{ width: '100%', height: '100%' }}
           />
@@ -198,28 +271,13 @@ export function FullscreenPlayer(): JSX.Element {
       <div className={styles.fsTint} />
       <div className={styles.fsVignette} />
 
-      {/* 全屏页右上角：切回右侧停靠的歌词面板（两者互斥，面板在更低的层里，必须先退出全屏） */}
-      <div className={styles.fsCorner}>
-        <button
-          type="button"
-          className={styles.fsCornerButton}
-          onClick={() => setLyricsOpen(true)}
-          title="歌词面板 (Ctrl+L)"
-        >
-          <Icon name="lyrics" size={18} />
-        </button>
-      </div>
-
       {mounted && (
         <div className={styles.fsStage}>
           <div className={styles.fsLeft}>
             <button
               type="button"
               className={styles.fsClose}
-              ref={(el) => {
-                closeRef.current = el
-                bindClose(el)
-              }}
+              ref={closeRef}
               onClick={() => setFullscreen(false)}
               title="关闭 (Esc)"
             >
@@ -253,8 +311,16 @@ export function FullscreenPlayer(): JSX.Element {
                 <button
                   type="button"
                   className={styles.fsMore}
-                  onClick={() => song && setInfoSongId(song.id)}
-                  title="歌曲信息"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    const rect = event.currentTarget.getBoundingClientRect()
+                    setLyricsMenu({
+                      x: Math.max(8, rect.right - 240),
+                      y: rect.bottom + 6,
+                      kind: 'page'
+                    })
+                  }}
+                  title="更多"
                 >
                   <Icon name="more" size={18} />
                 </button>
@@ -339,7 +405,17 @@ export function FullscreenPlayer(): JSX.Element {
               </div>
 
               <div className={styles.fsVolume}>
-                <Icon name="volumeLow" size={16} className={styles.fsVicon} />
+                <button
+                  type="button"
+                  className={styles.fsVicon}
+                  onClick={toggleMute}
+                  title={playback.muted || playback.volume <= 0.001 ? '取消静音' : '静音'}
+                >
+                  <Icon
+                    name={playback.muted || playback.volume <= 0.001 ? 'volumeOff' : 'volumeLow'}
+                    size={16}
+                  />
+                </button>
                 <div
                   className={styles.fsVolumeTrack}
                   onPointerDown={(event) => {
@@ -366,7 +442,29 @@ export function FullscreenPlayer(): JSX.Element {
             </div>
           </div>
 
-          <div className={styles.fsLyric}>
+          <div
+            className={styles.fsLyric}
+            onContextMenu={(event) => {
+              // 行菜单：命中 AMLL 的行包裹层才截获，否则让它冒泡到整页菜单
+              const target = event.target as HTMLElement | null
+              const wrapper = target?.closest('[class*="lyricLineWrapper"]')
+              if (!wrapper) return
+              const text = (wrapper.textContent ?? '').trim()
+              // 间奏/空行没有可复制的文本：不拦截，交给整页菜单
+              if (!text) return
+              event.preventDefault()
+              event.stopPropagation()
+              const flat = (value: string): string => value.replace(/\s+/g, '')
+              const found = lines.find((line) => {
+                const main = flat(line.words.map((word) => word.word).join(''))
+                return main.length > 0 && flat(text).startsWith(main)
+              })
+              const sub = found
+                ? [found.translatedLyric, found.romanLyric].filter(Boolean).join(' / ')
+                : ''
+              setLyricsMenu({ x: event.clientX, y: event.clientY, kind: 'line', text, sub })
+            }}
+          >
             <LyricsView
               lines={lines}
               playing={playback.playing}
@@ -374,14 +472,14 @@ export function FullscreenPlayer(): JSX.Element {
               fontSize={lyricFontSize}
               weight={settings.lyricWeight}
               highlight={settings.lyricHighlight}
-              blur={settings.lyricBlur}
-              scale={settings.lyricScale}
+              blur={lyricLite ? false : settings.lyricBlur}
+              scale={lyricLite ? false : settings.lyricScale}
               wordFade={settings.wordFade}
               hidePassed={settings.hidePassed}
               clickSeek={settings.lyricClickSeek}
               fontFamily={
                 settings.lyricFont === 'pingfang'
-                  ? '"PingFang SC","Microsoft YaHei",system-ui,sans-serif'
+                  ? '"SA PingFang","PingFang SC","PingFang SC Regular","Microsoft YaHei",system-ui,sans-serif'
                   : 'system-ui,"Segoe UI",sans-serif'
               }
               alignAnchor="center"

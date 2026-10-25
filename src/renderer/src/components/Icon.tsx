@@ -19,6 +19,7 @@ export type IconName =
   | 'repeatOne'
   | 'volumeLow'
   | 'volumeHigh'
+  | 'volumeOff'
   | 'lyrics'
   | 'queue'
   | 'more'
@@ -160,6 +161,12 @@ const paths: Record<IconName, JSX.Element> = {
     <g {...stroke}>
       <path d="M3.4 9.4h3L10.4 6v12l-4-3.4h-3Z" />
       <path d="M13.6 9.6a3.4 3.4 0 0 1 0 4.8M16.2 7.2a7 7 0 0 1 0 9.6" />
+    </g>
+  ),
+  volumeOff: (
+    <g {...stroke}>
+      <path d="M3.4 9.4h3L10.4 6v12l-4-3.4h-3Z" />
+      <path d="m14.2 9.4 4.4 5M18.6 9.4l-4.4 5" />
     </g>
   ),
   lyrics: (

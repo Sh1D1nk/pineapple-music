@@ -2,7 +2,8 @@
   max-width: 1400px;
   margin: 0 auto;
   padding-bottom: 40px;
-  animation: pageIn 220ms var(--ease) both;
+  /* 不放入场动画：页面 key 每次导航都会重建，从 opacity 0 淡入等于给每次「返回」
+     都安排一次白闪；详情页的进场由 View Transition 负责，主导航由 .viewSwap 负责。 */
 }
 
 /* 专辑详情：裁剪封面作为背景，正文压在上面。
@@ -36,15 +37,6 @@
     color-mix(in srgb, var(--bg-content) 82%, transparent) 46%,
     var(--bg-content) 94%
   );
-}
-
-@keyframes pageIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
 }
 
 .header {
@@ -118,30 +110,8 @@
   padding: 0;
   text-align: left;
   transition: transform 200ms var(--ease);
-  animation: cardIn 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
-}
-
-.card:nth-child(2n) {
-  animation-delay: 18ms;
-}
-
-.card:nth-child(3n) {
-  animation-delay: 32ms;
-}
-
-.card:nth-child(4n) {
-  animation-delay: 46ms;
-}
-
-@keyframes cardIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  /* 卡片也不再逐个淡入：列表返回时这些动画会和新挂载的封面解码抢同一帧，
+     视觉上就是「白一下再一块块浮出来」。 */
 }
 
 .cardArt {

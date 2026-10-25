@@ -1,5 +1,5 @@
 import { useMemo, type JSX } from 'react'
-import { useStore } from '../state/store'
+import { useStore, useCurrentSongId, useIsPlaying } from '../state/store'
 import { buildAlbums, buildArtists } from '../lib/group'
 import { matches, matchesText } from '../lib/search'
 import { Cover } from '../components/Cover'
@@ -14,7 +14,6 @@ export function SearchView(): JSX.Element {
   const songIds = useStore((s) => s.songIds)
   const setView = useStore((s) => s.setView)
   const playSongs = useStore((s) => s.playSongs)
-  const playback = useStore((s) => s.playback)
   const setContextMenu = useStore((s) => s.setContextMenu)
 
   const { artists, albums, tracks } = useMemo(() => {
@@ -32,7 +31,7 @@ export function SearchView(): JSX.Element {
   }, [query, songIds, songs])
 
   const empty = artists.length === 0 && albums.length === 0 && tracks.length === 0
-  const current = playback.queue[playback.index]?.songId ?? null
+  const current = useCurrentSongId()
 
   return (
     <div className={styles.page}>

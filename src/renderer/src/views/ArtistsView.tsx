@@ -1,5 +1,5 @@
 import { useMemo, type JSX } from 'react'
-import { useStore } from '../state/store'
+import { useStore, useCurrentSongId, useIsPlaying } from '../state/store'
 import { buildAlbums, buildArtists, albumsSorted, songsOfAlbum } from '../lib/group'
 import { Cover } from '../components/Cover'
 import { Icon } from '../components/Icon'
@@ -63,7 +63,6 @@ export function ArtistDetail({ name }: DetailProps): JSX.Element {
   const songIds = useStore((s) => s.songIds)
   const playSongs = useStore((s) => s.playSongs)
   const setView = useStore((s) => s.setView)
-  const playback = useStore((s) => s.playback)
   const setContextMenu = useStore((s) => s.setContextMenu)
 
   const { albums, tracks } = useMemo(() => {
@@ -79,7 +78,8 @@ export function ArtistDetail({ name }: DetailProps): JSX.Element {
   }, [songIds, songs, name])
 
   const top = tracks.slice(0, 10)
-  const current = playback.queue[playback.index]?.songId ?? null
+  const current = useCurrentSongId()
+  const playing = useIsPlaying()
 
   return (
     <div className={styles.page}>
@@ -89,7 +89,7 @@ export function ArtistDetail({ name }: DetailProps): JSX.Element {
         <>
           <div className={styles.searchSectionTitle}>专辑</div>
           <div className={styles.grid} style={{ marginBottom: 32 }}>
-            {albums.map((album) => (
+            {albums.map((album, albumIndex) => (
               <div
                 key={album.key}
                 className={styles.card}
@@ -104,7 +104,7 @@ export function ArtistDetail({ name }: DetailProps): JSX.Element {
                 }}
               >
                 <div className={styles.cardArt} data-card-art>
-                  <Cover coverId={album.coverId} size={640} radius={8} alt={album.name} />
+                  <Cover coverId={album.coverId} size={240} radius={8} alt={album.name} priority={albumIndex < 8} />
                   <button
                     type="button"
                     className={styles.cardPlay}
@@ -131,7 +131,7 @@ export function ArtistDetail({ name }: DetailProps): JSX.Element {
       <TrackTable
         songs={top}
         currentId={current}
-        playing={playback.playing}
+        playing={playing}
         onPlay={(_song, index) => playSongs(tracks.map((t) => t.id), index)}
         onContextMenu={(event, song) => {
           event.preventDefault()

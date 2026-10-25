@@ -481,11 +481,11 @@ export function SettingsView(): JSX.Element {
         <Row label="显示音译">
           <Switch value={settings.showRoman} onChange={(value) => void update({ showRoman: value })} />
         </Row>
-        <Row label="歌词字号" hint="逐字歌词的基准字号倍数">
+        <Row label="歌词字号" hint="逐字歌词的基准字号倍数（0.60x – 2.00x）">
           <Slider
             value={Math.round(settings.lyricFontScale * 100)}
-            min={80}
-            max={130}
+            min={60}
+            max={200}
             step={5}
             suffix="%"
             onChange={(value) => void update({ lyricFontScale: value / 100 })}
@@ -554,12 +554,12 @@ export function SettingsView(): JSX.Element {
         <Row label="歌词缩放效果" hint="非当前行轻微缩小（AMLL）">
           <Switch value={settings.lyricScale} onChange={(value) => void update({ lyricScale: value })} />
         </Row>
-        <Row label="逐字渐变宽度" hint="默认 0.60，模拟 Apple Music 的逐字擦除">
+        <Row label="逐字渐变宽度" hint="0.01 近似逐字硬切，1.50 为整行渐变">
           <Slider
             value={settings.wordFade}
-            min={0.05}
+            min={0.01}
             max={1.5}
-            step={0.05}
+            step={0.01}
             onChange={(value) => void update({ wordFade: value })}
           />
         </Row>
@@ -717,7 +717,7 @@ export function SettingsView(): JSX.Element {
             onChange={(value) => void update({ barBlur: value })}
           />
         </Row>
-        <Row label="封面映射强度" hint="顶栏透出专辑封面">
+        <Row label="封面环境色" hint="顶栏玻璃里透出封面模糊后的色雾">
           <Slider
             value={settings.barCover}
             min={0}

@@ -37,3 +37,8 @@
 .coverReady {
   opacity: 1;
 }
+
+/* 缓存命中时直接给成品，不要 220ms 淡入 */
+.coverInstant {
+  transition: none;
+}

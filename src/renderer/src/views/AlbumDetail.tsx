@@ -1,5 +1,5 @@
 import { useMemo, type JSX } from 'react'
-import { useStore } from '../state/store'
+import { useStore, useCurrentSongId, useIsPlaying } from '../state/store'
 import { buildAlbums, songsOfAlbum } from '../lib/group'
 import { Cover } from '../components/Cover'
 import { Icon } from '../components/Icon'
@@ -18,7 +18,6 @@ export function AlbumDetail({ albumKey }: Props): JSX.Element {
   const songIds = useStore((s) => s.songIds)
   const setView = useStore((s) => s.setView)
   const playSongs = useStore((s) => s.playSongs)
-  const playback = useStore((s) => s.playback)
   const setContextMenu = useStore((s) => s.setContextMenu)
 
   const albums = useMemo(
@@ -27,7 +26,8 @@ export function AlbumDetail({ albumKey }: Props): JSX.Element {
   )
   const album = albums.get(albumKey)
   const tracks = useMemo(() => (album ? songsOfAlbum(songs, album) : []), [album, songs])
-  const current = playback.queue[playback.index]?.songId ?? null
+  const current = useCurrentSongId()
+  const playing = useIsPlaying()
   const totalDuration = tracks.reduce((sum, t) => sum + t.durationSec, 0)
 
   if (!album) {
@@ -96,7 +96,7 @@ export function AlbumDetail({ albumKey }: Props): JSX.Element {
         songs={tracks}
         variant="album"
         currentId={current}
-        playing={playback.playing}
+        playing={playing}
         showDiscHeaders={(album.discCount ?? 1) > 1}
         onPlay={(_song, index) => playSongs(tracks.map((t) => t.id), index)}
         onContextMenu={(event, song) => {

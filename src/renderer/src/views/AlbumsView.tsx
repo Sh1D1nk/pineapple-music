@@ -49,7 +49,7 @@ export function AlbumsView({ title, mode }: Props): JSX.Element {
       </div>
 
       <div className={styles.grid}>
-        {list.map((album) => (
+        {list.map((album, albumIndex) => (
           <div
             key={album.key}
             data-album-card={album.key}
@@ -70,7 +70,7 @@ export function AlbumsView({ title, mode }: Props): JSX.Element {
               data-card-art
               style={album.key === getMorphAlbum() ? { viewTransitionName: MORPH_COVER } : undefined}
             >
-              <Cover coverId={album.coverId} size={640} radius={8} alt={album.name} />
+              <Cover coverId={album.coverId} size={240} radius={8} alt={album.name} priority={albumIndex < 8} />
               <button
                 type="button"
                 className={styles.cardPlay}

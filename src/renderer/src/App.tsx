@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { useStore } from './state/store'
 import { GlassProvider } from './glass/GlassProvider'
 import { Sidebar } from './components/Sidebar'
@@ -7,6 +7,8 @@ import { QueuePanel } from './components/QueuePanel'
 import { LyricsPanel } from './components/LyricsPanel'
 import { CoverFlow } from './components/CoverFlow'
 import { FullscreenPlayer } from './components/FullscreenPlayer'
+import { LyricsMenu } from './components/LyricsMenu'
+import { LyricsSettingsDialog } from './components/LyricsSettingsDialog'
 import { SongInfoDialog } from './components/SongInfoDialog'
 import { ContextMenu } from './components/ContextMenu'
 import { Icon } from './components/Icon'
@@ -56,6 +58,9 @@ function useShortcuts(): void {
         if (state.coverFlowOpen) state.setCoverFlowOpen(false)
         else if (state.infoSongId) state.setInfoSongId(null)
         else if (state.contextMenu) state.setContextMenu(null)
+        // 歌词页内的浮层优先于整页：先收菜单，再收设置窗，最后才退出歌词页
+        else if (state.lyricsMenu) state.setLyricsMenu(null)
+        else if (state.lyricsSettingsOpen) state.setLyricsSettingsOpen(false)
         else if (state.fullscreen) state.setFullscreen(false)
         else if (state.queueOpen) state.setQueueOpen(false)
         else if (state.lyricsOpen) state.setLyricsOpen(false)
@@ -85,6 +90,10 @@ function useShortcuts(): void {
       } else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         state.setCoverFlowOpen(!state.coverFlowOpen)
+      } else if (event.ctrlKey && event.altKey && event.key.toLowerCase() === 'l') {
+        // 插件原快捷键：Ctrl+Alt+L 开关歌词页（宿主可能占用了 Ctrl+L，所以两个都留）
+        event.preventDefault()
+        state.setFullscreen(!state.fullscreen)
       } else if (event.ctrlKey && event.key.toLowerCase() === 'l') {
         event.preventDefault()
         state.setLyricsOpen(!state.lyricsOpen)
@@ -242,12 +251,39 @@ export function App(): JSX.Element {
     document.documentElement.style.setProperty('--sidebar-w', `${sidebarWidth}px`)
   }, [sidebarWidth])
 
-  // A new page always starts at the top; carrying the previous scroll position into an album
-  // detail view cuts its hero in half.
+  // 每个视图记住自己的滚动位置：从专辑详情退回列表要落回原处，
+  // 正向切到新页面才归零（否则详情页的 hero 会被上一页的滚动位置切掉一半）。
+  // 用 layout effect 在绘制前写入，避免「先画在顶部再跳回去」的二次闪动。
+  const scrollMemory = useRef(new Map<string, number>())
+  const viewKeyRef = useRef(viewKey)
+  viewKeyRef.current = viewKey
+  const lastView = useRef<{ key: string; kind: string }>({ key: viewKey, kind: view.kind })
+  // 滚动位置必须「边滚边记」：视图切换的 layout effect 是在新页面已经换上之后才跑的，
+  // 那时读到的 scrollTop 已经被新页面夹成 0，记下来的是错的。
   useEffect(() => {
     const el = document.getElementById('contentScroll')
-    if (el) el.scrollTop = 0
-  }, [viewKey])
+    if (!el) return undefined
+    const onScroll = (): void => {
+      scrollMemory.current.set(viewKeyRef.current, el.scrollTop)
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+  useLayoutEffect(() => {
+    const el = document.getElementById('contentScroll')
+    if (!el) return
+    const prev = lastView.current
+    if (prev.key === viewKey) return
+    const fromDetail = prev.kind === 'album' || prev.kind === 'artist'
+    if (fromDetail) {
+      el.scrollTop = scrollMemory.current.get(viewKey) ?? 0
+    } else {
+      // 正向进入新页面：从顶部开始，并丢掉上一次残留的位置
+      scrollMemory.current.delete(viewKey)
+      el.scrollTop = 0
+    }
+    lastView.current = { key: viewKey, kind: view.kind }
+  }, [viewKey, view.kind])
 
   return (
     <GlassProvider mode={settings.glass}>
@@ -275,6 +311,8 @@ export function App(): JSX.Element {
 
         <div className="overlayLayer">
           <FullscreenPlayer />
+          <LyricsSettingsDialog />
+          <LyricsMenu />
           <SongInfoDialog />
           <ContextMenu />
           <Toasts />

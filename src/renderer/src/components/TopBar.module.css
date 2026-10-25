@@ -422,12 +422,16 @@
   -webkit-backdrop-filter: none;
 }
 
-/* 底边栏式的「封面映射」：把当前封面按强度透进胶囊里 */
+/* 封面环境色：当前封面重度模糊后当薄雾透进胶囊，不出现可辨认的图像 */
 .coverTint {
+  /* 只做「环境色」：整张封面重度模糊后当一层薄雾，不再有可辨认的图像内容。
+     之前直接把封面按 45% 铺满胶囊，浅色主题下等于一条实心图片，玻璃感尽失。 */
   position: absolute;
-  inset: 0;
+  inset: -14px;
   background-size: cover;
   background-position: center;
+  filter: blur(26px) saturate(1.5);
+  transform: scale(1.06);
   pointer-events: none;
   z-index: 0;
 }

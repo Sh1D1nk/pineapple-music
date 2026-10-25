@@ -1,5 +1,5 @@
 import { useMemo, type JSX } from 'react'
-import { useStore } from '../state/store'
+import { useStore, useCurrentSongId, useIsPlaying } from '../state/store'
 import { buildAlbums, songsOfAlbum } from '../lib/group'
 import { TrackTable } from '../components/TrackTable'
 import { Cover } from '../components/Cover'
@@ -17,7 +17,6 @@ export function FavoritesView(): JSX.Element {
   const songs = useStore((s) => s.songs)
   const songIds = useStore((s) => s.songIds)
   const favorites = useStore((s) => s.favorites)
-  const playback = useStore((s) => s.playback)
   const playSongs = useStore((s) => s.playSongs)
   const setView = useStore((s) => s.setView)
   const setContextMenu = useStore((s) => s.setContextMenu)
@@ -38,7 +37,8 @@ export function FavoritesView(): JSX.Element {
     [favorites.albums, albums]
   )
 
-  const current = playback.queue[playback.index]?.songId ?? null
+  const current = useCurrentSongId()
+  const playing = useIsPlaying()
   const empty = favoriteSongs.length === 0 && favoriteAlbums.length === 0
 
   if (empty) {
@@ -75,7 +75,7 @@ export function FavoritesView(): JSX.Element {
         <>
           <div className={styles.searchSectionTitle}>专辑</div>
           <div className={styles.grid} style={{ marginBottom: 30 }}>
-            {favoriteAlbums.map((album) => (
+            {favoriteAlbums.map((album, albumIndex) => (
               <div
                 key={album.key}
                 data-album-card={album.key}
@@ -96,7 +96,7 @@ export function FavoritesView(): JSX.Element {
                   data-card-art
                   style={album.key === getMorphAlbum() ? { viewTransitionName: MORPH_COVER } : undefined}
                 >
-                  <Cover coverId={album.coverId} size={640} radius={8} alt={album.name} />
+                  <Cover coverId={album.coverId} size={240} radius={8} alt={album.name} priority={albumIndex < 8} />
                   <button
                     type="button"
                     className={styles.cardPlay}
@@ -137,7 +137,7 @@ export function FavoritesView(): JSX.Element {
         <TrackTable
           songs={favoriteSongs}
           currentId={current}
-          playing={playback.playing}
+          playing={playing}
           onPlay={(_song, index) => playSongs(favoriteSongs.map((s) => s.id), index)}
           onContextMenu={(event, song) => {
             event.preventDefault()

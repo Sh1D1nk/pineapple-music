@@ -29,6 +29,7 @@ export function QueuePanel(): JSX.Element {
     <div
       className={`glass glassLite ${styles.panel} ${open ? styles.panelOpen : ''}`}
       aria-hidden={!open}
+      inert={!open}
       style={{ pointerEvents: open ? 'auto' : 'none' }}
     >
       <div className={styles.panelHeader}>

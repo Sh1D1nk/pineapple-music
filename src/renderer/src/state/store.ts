@@ -34,6 +34,17 @@ export interface ContextMenuState {
   albumKey?: string
 }
 
+/** 歌词页内的菜单：整页右键与歌词行右键共用一套坐标与开关。 */
+export interface LyricsMenuState {
+  x: number
+  y: number
+  kind: 'page' | 'line'
+  /** 行菜单：该行原文 */
+  text?: string
+  /** 行菜单：该行译文 / 音译 */
+  sub?: string
+}
+
 export interface Toast {
   id: number
   text: string
@@ -79,6 +90,12 @@ interface StoreState {
   infoSongId: string | null
   settingsSection: string | null
   contextMenu: ContextMenuState | null
+  /** 歌词页右键菜单（整页 / 歌词行） */
+  lyricsMenu: LyricsMenuState | null
+  /** 歌词页内设置窗 */
+  lyricsSettingsOpen: boolean
+  /** 自适应画质档位（0 完整 / 3 最省），由歌词页测量帧率后写回，调试页展示 */
+  lyricsQualityLevel: number
   toasts: Toast[]
   dragActive: boolean
   playback: PlaybackState
@@ -95,6 +112,9 @@ interface StoreState {
   setCoverFlowOpen: (open: boolean) => void
   setInfoSongId: (id: string | null) => void
   setContextMenu: (menu: ContextMenuState | null) => void
+  setLyricsMenu: (menu: LyricsMenuState | null) => void
+  setLyricsSettingsOpen: (open: boolean) => void
+  setLyricsQualityLevel: (level: number) => void
   setDragActive: (active: boolean) => void
   pushToast: (text: string) => void
   dismissToast: (id: number) => void
@@ -254,6 +274,9 @@ export const useStore = create<StoreState>((set, get) => {
     infoSongId: null,
     settingsSection: null,
     contextMenu: null,
+    lyricsMenu: null,
+    lyricsSettingsOpen: false,
+    lyricsQualityLevel: 0,
     toasts: [],
     dragActive: false,
     lyrics: null,
@@ -423,7 +446,21 @@ export const useStore = create<StoreState>((set, get) => {
     setFullscreen(open) {
       // 只做应用内全屏：切换系统全屏会把窗口状态搅乱（尤其在最大化时），
       // 真正的系统全屏留给 F11。全屏页与侧边面板互斥，理由见 setLyricsOpen。
-      set(open ? { fullscreen: true, lyricsOpen: false } : { fullscreen: false })
+      // 退出歌词页时顺手收掉页内菜单与设置窗 —— 否则它们会孤零零地浮在别的页面上。
+      set(
+        open
+          ? { fullscreen: true, lyricsOpen: false, lyricsMenu: null }
+          : { fullscreen: false, lyricsMenu: null, lyricsSettingsOpen: false }
+      )
+    },
+    setLyricsMenu(menu) {
+      set({ lyricsMenu: menu })
+    },
+    setLyricsSettingsOpen(open) {
+      set({ lyricsSettingsOpen: open, lyricsMenu: open ? null : get().lyricsMenu })
+    },
+    setLyricsQualityLevel(level) {
+      set({ lyricsQualityLevel: level })
     },
     setInfoSongId(id) {
       set({ infoSongId: id })
@@ -697,6 +734,17 @@ export const useStore = create<StoreState>((set, get) => {
     }
   }
 })
+
+/**
+ * 只订阅「当前歌曲 id / 是否在播放」这两个标量。
+ *
+ * 直接 `useStore((s) => s.playback)` 会让列表页跟着进度收到每秒 10 次的新对象，
+ * 整页（含所有封面与玻璃层）重渲染 —— 歌曲/专辑/收藏页的滚动卡顿主要来自这里。
+ */
+export const useCurrentSongId = (): string | null =>
+  useStore((s) => s.playback.queue[s.playback.index]?.songId ?? null)
+
+export const useIsPlaying = (): boolean => useStore((s) => s.playback.playing)
 
 if (typeof window !== 'undefined') {
   // 诊断用：控制台可直接读 store 状态
