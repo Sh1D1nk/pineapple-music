@@ -24,7 +24,7 @@ jobs:
       - run: npm ci
 
       - name: Build installer
-        run: npx electron-builder --win nsis -c.directories.output=dist-ci
+        run: npx electron-builder --win nsis --publish never
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -32,5 +32,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag }}
-          files: dist-ci/*.exe
+          files: dist/*.exe
           fail_on_unmatched_files: true
