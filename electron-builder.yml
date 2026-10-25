@@ -40,6 +40,8 @@ nsis:
   perMachine: false
   allowElevation: true
   allowToChangeInstallationDirectory: true
+  # 默认装到 D:\Pineapple Music（D 盘存在时），见 build/installer.nsh
+  include: build/installer.nsh
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Pineapple Music

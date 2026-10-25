@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1 - 2026-10-25
+
+- 修复分轨推理期间界面周期性冻结（推理整条管线迁入 worker 线程）；安装向导默认目录改为 D:\Pineapple Music（D 盘存在时）
+
 ## 1.4.0 - 2026-10-25
 
 AutoMix 核心算法从 HyPlayer-Nextgen（github.com/Gaimoydev/HyPlayer-Nextgen）移植升级。
