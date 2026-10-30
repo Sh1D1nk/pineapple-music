@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
-import { BackgroundRender } from '@applemusic-like-lyrics/react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from 'react'
+import { BackgroundRender, type BackgroundRenderRef } from '@applemusic-like-lyrics/react'
 import { useStore, useCurrentSongId } from '../state/store'
 import { bridge, coverUrl } from '../bridge'
 import { Cover } from './Cover'
@@ -59,6 +59,16 @@ export function FullscreenPlayer(): JSX.Element {
   const song = songs[playback.queue[playback.index]?.songId ?? '']
   const albumArt = coverUrl(song?.coverId ?? null, 640)
   const trackRef = useRef<HTMLDivElement>(null)
+
+  /** 流体背景实例：切歌时要直接改它的流速，做出「搅动水面」再慢慢平静的效果 */
+  const bgRef = useRef<BackgroundRenderRef>(null)
+  /** 切歌墨滴扩散：旧封面垫底，新背景从随机一点铺满整屏后撤掉旧层 */
+  const [ripple, setRipple] = useState<{ x: number; y: number; prevArt: string } | null>(null)
+  const prevArtRef = useRef<string | null>(albumArt)
+  /** 「接下来播放」自动隐藏（随机推荐场景） */
+  const fsRandomHint = useStore((s) => s.fsRandomHint)
+  const [upNextHidden, setUpNextHidden] = useState(false)
+  const upNextTimer = useRef<number | null>(null)
 
   // 歌词归属校验：store.lyrics 是异步加载的，切歌瞬间它还是上一首的载荷。
   // 不校验 songId 就会出现「标题是 B、歌词滚的是 A」的错位 —— 等新歌词到位再显示。
@@ -231,6 +241,55 @@ export function FullscreenPlayer(): JSX.Element {
     }
   }, [open, nextSong?.id])
 
+  // 切歌过渡：新背景像墨滴一样从随机一点晕开，同时瞬间加快流体流速（像用手搅动水面），
+  // 之后 ease-out 回落到用户设定的速度。
+  useEffect(() => {
+    const prev = prevArtRef.current
+    prevArtRef.current = albumArt
+    if (!open || !albumArt || !prev || prev === albumArt) return undefined
+    setRipple({ x: 12 + Math.random() * 76, y: 16 + Math.random() * 68, prevArt: prev })
+    const base = settings.bgFlowSpeed || 2
+    const setFlow = (speed: number): void => {
+      const renderer = bgRef.current?.bgRender as { setFlowSpeed?: (value: number) => void } | undefined
+      renderer?.setFlowSpeed?.(speed)
+    }
+    const started = performance.now()
+    let raf = 0
+    const stir = (): void => {
+      const t = Math.min(1, (performance.now() - started) / 1900)
+      // 起始约 2.4 倍速，二次缓出回到原速：先急搅，再让水面慢慢平静
+      setFlow(base * (1 + 1.4 * (1 - t) * (1 - t)))
+      if (t < 1) raf = window.requestAnimationFrame(stir)
+      else setFlow(base)
+    }
+    stir()
+    const timer = window.setTimeout(() => setRipple(null), 1500)
+    return () => {
+      window.cancelAnimationFrame(raf)
+      window.clearTimeout(timer)
+      setFlow(base)
+    }
+  }, [albumArt, open, settings.bgFlowSpeed])
+
+  // 「接下来播放」：随机推荐进来时只亮 10 秒就收起，把舞台还给歌词；
+  // 鼠标移入立刻召回，移出后重新开始倒计时。
+  const armUpNextHide = (): void => {
+    if (upNextTimer.current !== null) window.clearTimeout(upNextTimer.current)
+    upNextTimer.current = null
+    if (!fsRandomHint) return
+    upNextTimer.current = window.setTimeout(() => setUpNextHidden(true), 10000)
+  }
+  useEffect(() => {
+    setUpNextHidden(false)
+    armUpNextHide()
+    return () => {
+      if (upNextTimer.current !== null) window.clearTimeout(upNextTimer.current)
+      upNextTimer.current = null
+    }
+    // armUpNextHide 只依赖 fsRandomHint，随本 effect 一起重建即可
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fsRandomHint, nextSong?.id, open])
+
   const seekFrom = (clientX: number): void => {
     const el = trackRef.current
     if (!el || duration <= 0) return
@@ -258,6 +317,12 @@ export function FullscreenPlayer(): JSX.Element {
   // 性能模式与最低档都关掉逐行的模糊/缩放遮罩：这是集成显卡上最后一块可省的开销
   const lyricLite = bgPerf || aq.lyricLite
 
+  // 切歌扩散：把「墨滴落点」以 CSS 变量传给 mask 动画
+  const rippleClass = ripple ? ` ${styles.fsRipple}` : ''
+  const rippleStyle = ripple
+    ? ({ '--ripple-x': `${ripple.x}%`, '--ripple-y': `${ripple.y}%` } as CSSProperties)
+    : undefined
+
   return (
     <div
       className={`${styles.fullscreen} ${open ? styles.fullscreenOpen : ''} ${hasLyrics ? '' : styles.fsNoLyric}`}
@@ -272,12 +337,23 @@ export function FullscreenPlayer(): JSX.Element {
         setLyricsMenu({ x: event.clientX, y: event.clientY, kind: 'page' })
       }}
     >
+      {/* 上一首的背景垫底：墨滴扩散期间它被新画面一点点吃掉，动画结束就卸载 */}
+      {ripple && (
+        <div
+          className={styles.fsBgPrev}
+          style={{
+            backgroundImage: `url(${ripple.prevArt})`,
+            filter: `blur(${Math.max(24, settings.bgBlur)}px) saturate(${settings.bgSaturate}) brightness(${settings.bgBrightness})`
+          }}
+        />
+      )}
       {mounted && song && albumArt && settings.bgEnabled && settings.bgType === 'flow' ? (
         <div
-          className={styles.fsBg}
-          style={{ filter: `saturate(${settings.bgSaturate}) brightness(${settings.bgBrightness})` }}
+          className={`${styles.fsBg}${rippleClass}`}
+          style={{ ...rippleStyle, filter: `saturate(${settings.bgSaturate}) brightness(${settings.bgBrightness})` }}
         >
           <BackgroundRender
+            ref={bgRef}
             album={albumArt}
             playing={playback.playing}
             fps={effectiveFps}
@@ -290,8 +366,9 @@ export function FullscreenPlayer(): JSX.Element {
         </div>
       ) : mounted && song && albumArt && settings.bgEnabled && settings.bgType === 'blur' ? (
         <div
-          className={styles.fsBg}
+          className={`${styles.fsBg}${rippleClass}`}
           style={{
+            ...rippleStyle,
             backgroundImage: `url(${albumArt})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
@@ -299,7 +376,10 @@ export function FullscreenPlayer(): JSX.Element {
           }}
         />
       ) : (
-        <div className={styles.fsBg} style={{ background: 'linear-gradient(150deg,#3a3a3f,#111113)' }} />
+        <div
+          className={`${styles.fsBg}${rippleClass}`}
+          style={{ ...rippleStyle, background: 'linear-gradient(150deg,#3a3a3f,#111113)' }}
+        />
       )}
       <div className={styles.fsTint} />
       <div className={styles.fsVignette} />
@@ -309,12 +389,19 @@ export function FullscreenPlayer(): JSX.Element {
           {/* 接下来播放：右栏顶部悬浮卡片。放 fsStage 直接子级而不是 fsLyric 里，
               因为 fsLyric 的上下 mask 渐隐会把卡片一起隐掉。 */}
           {nextSong && (
-            <button
-              type="button"
-              className={styles.fsUpNext}
-              onClick={() => useStore.getState().jumpToQueueIndex(playback.index + 1)}
-              title="跳到下一首"
-            >
+            <div className={styles.fsUpNextZone}>
+              <button
+                type="button"
+                className={`${styles.fsUpNext} ${upNextHidden ? styles.fsUpNextHidden : ''}`}
+                onClick={() => useStore.getState().jumpToQueueIndex(playback.index + 1)}
+                onMouseEnter={() => {
+                  setUpNextHidden(false)
+                  if (upNextTimer.current !== null) window.clearTimeout(upNextTimer.current)
+                  upNextTimer.current = null
+                }}
+                onMouseLeave={armUpNextHide}
+                title="跳到下一首"
+              >
               <Cover coverId={nextSong.coverId} size={80} display={34} radius={8} alt={nextSong.title} />
               <span className={styles.fsUpNextText}>
                 <span className={styles.fsUpNextLabel}>接下来播放</span>
@@ -328,8 +415,9 @@ export function FullscreenPlayer(): JSX.Element {
                       : ''}
                 </span>
               </span>
-              <Icon name="next" size={14} className={styles.fsUpNextIcon} />
-            </button>
+                <Icon name="next" size={14} className={styles.fsUpNextIcon} />
+              </button>
+            </div>
           )}
           <div className={styles.fsLeft}>
             <button
@@ -383,6 +471,13 @@ export function FullscreenPlayer(): JSX.Element {
                   <Icon name="more" size={18} />
                 </button>
               </div>
+
+              {/* AutoMix 模式提示：进度条上方一行小字，高光像水波一样缓缓扫过 */}
+              {settings.automix.enabled && (
+                <div className={styles.fsAutomixHint} aria-hidden="true">
+                  <span className={styles.fsAutomixHintText}>自动过渡</span>
+                </div>
+              )}
 
               <div
                 ref={trackRef}

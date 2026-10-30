@@ -86,6 +86,8 @@ interface StoreState {
   queueOpen: boolean
   lyricsOpen: boolean
   fullscreen: boolean
+  /** 本次全屏页是否由「随机推荐」打开：决定「接下来播放」是否 10 秒后自动隐藏 */
+  fsRandomHint: boolean
   coverFlowOpen: boolean
   infoSongId: string | null
   settingsSection: string | null
@@ -274,6 +276,7 @@ export const useStore = create<StoreState>((set, get) => {
     queueOpen: false,
     lyricsOpen: false,
     fullscreen: false,
+    fsRandomHint: false,
     coverFlowOpen: false,
     infoSongId: null,
     settingsSection: null,
@@ -464,7 +467,7 @@ export const useStore = create<StoreState>((set, get) => {
       // 退出歌词页时顺手收掉页内菜单与设置窗 —— 否则它们会孤零零地浮在别的页面上。
       set(
         open
-          ? { fullscreen: true, lyricsOpen: false, lyricsMenu: null }
+          ? { fullscreen: true, lyricsOpen: false, lyricsMenu: null, fsRandomHint: false }
           : { fullscreen: false, lyricsMenu: null, lyricsSettingsOpen: false }
       )
     },
@@ -548,6 +551,8 @@ export const useStore = create<StoreState>((set, get) => {
         playback: { ...state.playback, queue: items, index: 0, history: [] },
         // 随机推荐的核心体验：点一下直接落到全屏歌词页（它与侧边歌词面板互斥，见 setFullscreen）
         fullscreen: true,
+        // 「接下来播放」在随机推荐里只亮 10 秒就收起，把舞台还给歌词（hover 可召回）
+        fsRandomHint: true,
         lyricsOpen: false,
         queueOpen: false
       })

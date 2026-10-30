@@ -31,7 +31,11 @@ function resolveFfmpeg(): string {
   const resources = (process as unknown as { resourcesPath?: string }).resourcesPath
   const candidates = [
     resources ? join(resources, 'bin', 'ffmpeg.exe') : null,
-    join(process.cwd(), 'resources', 'bin', 'ffmpeg.exe')
+    join(process.cwd(), 'resources', 'bin', 'ffmpeg.exe'),
+    // 开发/测试环境兜底：cwd 就是项目根时直接指向依赖里的二进制。
+    // 打包后 cwd 下没有 node_modules，这两个候选会被 existsSync 跳过，不会误命中。
+    join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg.exe'),
+    join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg')
   ].filter(Boolean) as string[]
   for (const candidate of candidates) if (existsSync(candidate)) return candidate
 
