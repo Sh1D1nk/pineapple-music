@@ -1,6 +1,6 @@
 import { useMemo, type JSX } from 'react'
 import { useStore, useCurrentSongId, useIsPlaying } from '../state/store'
-import { buildAlbums, buildArtists } from '../lib/group'
+import { albumsOf, artistsOf } from '../lib/group'
 import { matches, matchesText } from '../lib/search'
 import { Cover } from '../components/Cover'
 import { formatTime } from '../lib/format'
@@ -21,10 +21,10 @@ export function SearchView(): JSX.Element {
     const matchingSongs = all.filter((song) => matches(song, query))
     const artistNames = new Set<string>()
     for (const song of matchingSongs) for (const artist of song.artists) artistNames.add(artist)
-    const artistGroups = [...buildArtists(all).values()].filter(
+    const artistGroups = [...artistsOf(songs, songIds).values()].filter(
       (artist) => artistNames.has(artist.name) || matchesText(artist.name, query)
     )
-    const albumGroups = [...buildAlbums(all).values()].filter(
+    const albumGroups = [...albumsOf(songs, songIds).values()].filter(
       (album) => matchesText(album.name, query) || matchesText(album.artist, query)
     )
     return { artists: artistGroups.slice(0, 6), albums: albumGroups.slice(0, 12), tracks: matchingSongs.slice(0, 40) }

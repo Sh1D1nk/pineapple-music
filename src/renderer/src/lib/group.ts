@@ -106,3 +106,31 @@ export function distinctGenres(songs: SongMeta[]): string[] {
   for (const s of songs) if (s.genre) set.add(s.genre)
   return [...set].sort((a, b) => a.localeCompare(b, 'zh-CN'))
 }
+
+/**
+ * 分组结果缓存。
+ *
+ * 页面切换会通过 `key={viewKey}` 重建整棵视图树，视图里的 useMemo 随之失效 ——
+ * 每次翻页都要把整个曲库重新分组一遍。这里用 store 的 `songs` 对象做 WeakMap 键：
+ * 曲库没变时（引用不变）直接复用上次结果，翻页/搜索打字都省掉这趟全量扫描。
+ */
+const albumCache = new WeakMap<Record<string, SongMeta>, Map<string, AlbumGroup>>()
+const artistCache = new WeakMap<Record<string, SongMeta>, Map<string, ArtistGroup>>()
+
+export function albumsOf(songs: Record<string, SongMeta>, songIds: string[]): Map<string, AlbumGroup> {
+  const hit = albumCache.get(songs)
+  if (hit) return hit
+  const list = songIds.map((id) => songs[id]).filter((s): s is SongMeta => Boolean(s))
+  const built = buildAlbums(list)
+  albumCache.set(songs, built)
+  return built
+}
+
+export function artistsOf(songs: Record<string, SongMeta>, songIds: string[]): Map<string, ArtistGroup> {
+  const hit = artistCache.get(songs)
+  if (hit) return hit
+  const list = songIds.map((id) => songs[id]).filter((s): s is SongMeta => Boolean(s))
+  const built = buildArtists(list)
+  artistCache.set(songs, built)
+  return built
+}

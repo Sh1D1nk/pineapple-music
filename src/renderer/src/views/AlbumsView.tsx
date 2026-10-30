@@ -1,6 +1,6 @@
 import { useMemo, useState, type JSX } from 'react'
 import { useStore } from '../state/store'
-import { buildAlbums, albumsSorted, songsOfAlbum } from '../lib/group'
+import { albumsOf, albumsSorted, songsOfAlbum } from '../lib/group'
 import { Cover } from '../components/Cover'
 import { Icon } from '../components/Icon'
 import { formatCount } from '../lib/format'
@@ -20,11 +20,8 @@ export function AlbumsView({ title, mode }: Props): JSX.Element {
   const setContextMenu = useStore((s) => s.setContextMenu)
   const [sortMode, setSortMode] = useState<'recent' | 'title' | 'artist'>(mode === 'recent' ? 'recent' : 'title')
 
-  const allSongs = useMemo(
-    () => songIds.map((id) => songs[id]).filter((s): s is NonNullable<typeof s> => Boolean(s)),
-    [songIds, songs]
-  )
-  const albums = useMemo(() => buildAlbums(allSongs), [allSongs])
+  // 分组结果跨挂载缓存（键是 songs 引用）：翻页重建视图时不用重算整个曲库
+  const albums = useMemo(() => albumsOf(songs, songIds), [songs, songIds])
   const list = useMemo(() => albumsSorted(albums, sortMode), [albums, sortMode])
 
   return (

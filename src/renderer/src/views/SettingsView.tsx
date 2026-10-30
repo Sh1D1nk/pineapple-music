@@ -395,7 +395,8 @@ export function SettingsView(): JSX.Element {
             options={[
               { value: 'system', label: '跟随系统' },
               { value: 'light', label: '浅色' },
-              { value: 'dark', label: '深色' }
+              { value: 'dark', label: '深色' },
+              { value: 'liquid', label: '液态玻璃' }
             ]}
             onChange={(theme) => void update({ theme })}
           />

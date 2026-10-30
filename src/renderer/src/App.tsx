@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { useStore } from './state/store'
 import { GlassProvider } from './glass/GlassProvider'
 import { Sidebar } from './components/Sidebar'
+import { BottomBar } from './components/BottomBar'
 import { TopBar } from './components/TopBar'
 import { QueuePanel } from './components/QueuePanel'
 import { LyricsPanel } from './components/LyricsPanel'
@@ -32,11 +33,22 @@ import { ProgressWidget } from './components/ProgressWidget'
 function useTheme(): void {
   const settings = useStore((s) => s.settings)
   useEffect(() => {
+    const root = document.documentElement
+    const liquid = settings.theme === 'liquid'
     const apply = (): void => {
       const dark =
         settings.theme === 'dark' ||
+        liquid ||
         (settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-      document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+      root.dataset.theme = dark ? 'dark' : 'light'
+      // 液态玻璃主题：内容底色沿用深色令牌，另挂 skin/nav 两个标记给底栏与留白用
+      if (liquid) {
+        root.dataset.skin = 'liquid'
+        root.dataset.nav = 'bottom'
+      } else {
+        delete root.dataset.skin
+        delete root.dataset.nav
+      }
     }
     apply()
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
@@ -279,6 +291,13 @@ export function App(): JSX.Element {
     if (!el) return
     const prev = lastView.current
     if (prev.key === viewKey) return
+    // 切页动画期间给玻璃降压：backdrop-filter 的实时重采样是翻页掉帧的主因
+    // （实测 20fps → 100+fps）。动画只有 ~420ms，结束立刻恢复真实玻璃。
+    const root = document.documentElement
+    root.dataset.fx = 'cheap'
+    const fxTimer = window.setTimeout(() => {
+      delete root.dataset.fx
+    }, 420)
     const fromDetail = prev.kind === 'album' || prev.kind === 'artist'
     if (fromDetail) {
       el.scrollTop = scrollMemory.current.get(viewKey) ?? 0
@@ -290,6 +309,11 @@ export function App(): JSX.Element {
     // 换页后按新位置同步遮罩可见性（回到底部的页面不该留着渐隐条）
     document.querySelector('.scrollEdgeTop')?.classList.toggle('scrollEdgeVisible', el.scrollTop > 4)
     lastView.current = { key: viewKey, kind: view.kind }
+    return () => {
+      window.clearTimeout(fxTimer)
+      // effect 重跑时先清掉再重设，避免属性残留把玻璃永久降级
+      delete root.dataset.fx
+    }
   }, [viewKey, view.kind])
 
   return (
@@ -305,7 +329,7 @@ export function App(): JSX.Element {
         </div>
 
         <div className="floatLayer">
-          <Sidebar />
+          {settings.theme === 'liquid' ? <BottomBar /> : <Sidebar />}
           <TopBar />
           <QueuePanel />
           <LyricsPanel />

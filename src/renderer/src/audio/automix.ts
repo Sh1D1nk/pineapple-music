@@ -15,6 +15,12 @@ export interface AutoMixState {
   level: TransitionPlan['level'] | null
   nextSongId: string | null
   status: 'idle' | 'planning' | 'rendering' | 'ready' | 'entering' | 'failed'
+  /**
+   * 引擎是否真的在跑桥段（来自 engine.isBridging()，由 tick 每 120ms 同步）。
+   * status 只是状态机的意图，bridging 才是事实——UI 必须两者都看，
+   * 否则 bridge 异常时会永远停在「正在过渡」。
+   */
+  bridging: boolean
   plan: TransitionPlan | null
   renderMs: number | null
   stretched: boolean
@@ -26,6 +32,7 @@ export const useAutoMix = create<AutoMixState>((set) => ({
   level: null,
   nextSongId: null,
   status: 'idle',
+  bridging: false,
   plan: null,
   renderMs: null,
   stretched: false,
@@ -119,6 +126,8 @@ let activeJob: ActiveJob | null = null
 let ticker: number | null = null
 let armed: { plan: TransitionPlan; current: SongMeta; next: SongMeta } | null = null
 let enterInFlight = false
+/** 进入过渡的时刻（performance.now），用于桥段卡死时的超时兜底 */
+let enteringAt = 0
 let stemsHinted = false
 
 /**
@@ -257,6 +266,34 @@ function tick(): void {
   const current = state.songs[currentItem.songId]
   if (!current) return
 
+  // 把「引擎是否真的在过渡」同步给 UI：status 是意图，bridging 是事实。
+  // 之前 UI 只看 status，bridge 一旦没能正常收尾，就会永远显示「正在过渡」。
+  const bridgingNow = engine.isBridging()
+  const am = useAutoMix.getState()
+  if (am.bridging !== bridgingNow) am.set({ bridging: bridgingNow })
+  if (!bridgingNow && am.status === 'entering' && !enterInFlight) {
+    am.set({ status: 'idle', plan: null, level: null })
+  }
+  // 过渡超时兜底：桥段比计划时长多跑 20 秒还不结束，说明交接卡死了。
+  // 强制收桥并回到普通播放，避免「永远停在过渡里」。
+  if (enterInFlight && bridgingNow && enteringAt > 0) {
+    const planned = (armed?.plan.bridgeDuration ?? 30) + 20
+    if (performance.now() - enteringAt > planned * 1000) {
+      engine.cancelBridge(false)
+      enterInFlight = false
+      enteringAt = 0
+      armed = null
+      useAutoMix.getState().set({
+        status: 'idle',
+        plan: null,
+        level: null,
+        bridging: false,
+        message: '过渡超时，已回到普通播放'
+      })
+      return
+    }
+  }
+
   const settings = state.settings.automix
   if (!settings.enabled) return
 
@@ -264,8 +301,9 @@ function tick(): void {
   // 否则整个 AutoMix 会在第一次过渡之后彻底沉默。
   if (enterInFlight && !engine.isBridging()) {
     enterInFlight = false
+    enteringAt = 0
     armed = null
-    useAutoMix.getState().set({ status: 'idle', plan: null, level: null })
+    useAutoMix.getState().set({ status: 'idle', plan: null, level: null, bridging: false })
     planForCurrent()
     return
   }
@@ -289,6 +327,7 @@ function tick(): void {
   if (plan.level === 'E') {
     if (position >= plan.startTime - 0.12 && position <= plan.startTime + 1) {
       enterInFlight = true
+      enteringAt = performance.now()
       useAutoMix.getState().set({ status: 'entering' })
       void engine.crossfadeTo(armed.next, { position: 0, duration: 0.06 })
       // 歌词由 store 的「当前歌曲 id」订阅驱动，这里不再手动 loadLyrics。
@@ -306,6 +345,7 @@ function tick(): void {
   }
   if (position >= plan.startTime - 0.15 && position <= plan.startTime + 2) {
     enterInFlight = true
+    enteringAt = performance.now()
     engine.enterBridge(Math.max(0, position - plan.startTime))
     useAutoMix.getState().set({ status: 'entering' })
   }

@@ -696,7 +696,7 @@ button.fsVicon:hover {
 .fsAutomixHintText {
   font-size: 0.6em;
   font-weight: 500;
-  letter-spacing: 3px;
+  letter-spacing: 1.2px;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.45);
   background: linear-gradient(
@@ -714,6 +714,12 @@ button.fsVicon:hover {
   animation:
     fsAutomixShimmer 3.4s linear infinite,
     fsAutomixFloat 3.4s ease-in-out infinite;
+}
+
+/* 过渡进行中：光带扫得更快、更亮，和「已就绪」的静态提示区分开 */
+.fsAutomixHintHot {
+  filter: brightness(1.25);
+  animation-duration: 1.4s, 1.4s;
 }
 
 @keyframes fsAutomixShimmer {

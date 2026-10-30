@@ -157,7 +157,7 @@ export interface SongInfoExtra {
 }
 
 export interface AppSettings {
-  theme: 'system' | 'light' | 'dark';
+  theme: 'system' | 'light' | 'dark' | 'liquid';
   glass: 'full' | 'lite' | 'off';
   sidebarWidth: number;
   lyricsPriority: ('sidecar' | 'embedded' | 'text')[];

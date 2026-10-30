@@ -147,6 +147,19 @@ a {
   background: color-mix(in srgb, var(--bg-content) 82%, transparent);
 }
 
+/*
+ * 切页动画期间（App 在 viewKey 变化时挂 data-fx="cheap"，约 420ms）：
+ * 玻璃层放弃实时背景模糊，换成与「关闭玻璃」一致的实底近似。
+ *
+ * 为什么值得：backdrop-filter 在整页重建/位移时是最贵的重绘，实测翻页 20fps → 100+fps；
+ * 而动画只有几百毫秒、整页都在位移和淡化，材质差异肉眼几乎无法分辨，动画一结束立刻恢复。
+ */
+html[data-fx='cheap'] .glass {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: color-mix(in srgb, var(--bg-content) 82%, transparent);
+}
+
 /* ---------------------------------------------------------------- shell */
 
 .app {
@@ -182,6 +195,31 @@ a {
 
 .contentScroll.withQueue {
   padding-right: calc(var(--queue-w) + 16px);
+}
+
+/* 液态玻璃主题：导航在底部，内容改为左右等距，并给悬浮底栏让出高度 */
+:root[data-nav='bottom'] .contentScroll {
+  padding-left: 24px;
+  padding-bottom: 116px;
+}
+
+/* 液态玻璃主题的底层：更深的背景让玻璃的高光与层次读得出来（不引入任何新元素） */
+:root[data-skin='liquid'] {
+  --bg-content: #131315;
+  --glass-tint: rgba(255, 255, 255, 0.06);
+}
+
+/*
+ * 同主题下的其它玻璃件（顶栏胶囊、面板、浮层）沿用同一套 Liquid Glass 边缘语言：
+ * 悬浮投影 + 顶部 1px 镜面高光 + 0.5pt 内描边。模糊仍交给现有玻璃机制（lite/full）提供，
+ * 这里只统一「材质表面」的观感，不改变任何布局或功能。
+ */
+:root[data-skin='liquid'] .glass {
+  background: rgba(28, 28, 30, 0.58);
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
 }
 
 /* Fade the content out under the floating glass instead of letting text collide with it.

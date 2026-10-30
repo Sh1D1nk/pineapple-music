@@ -1,0 +1,137 @@
+/*
+ * 底部导航栏 —— iOS 26 Liquid Glass 规格实现。
+ *
+ * 规范对照（均来自 Apple Human Interface Guidelines 的 Liquid Glass 描述）：
+ *   材质     半透明玻璃底 + 背景实时模糊（大半径）+ 饱和度增强（让背后内容「透」得干净）
+ *   透明度   深色底约 0.58，既能看清背后内容，又保证标签始终可读
+ *   边缘高光 顶部 1px 镜面高光（内阴影）+ 0.5pt 内描边，底边不额外加亮
+ *   圆角     连续大圆角（胶囊化），与容器高度成比例
+ *   层级     悬浮于内容之上，柔和、大范围的投影
+ *   交互态   选中项用同色系浅色胶囊底，不做位移/缩放等额外动效
+ */
+
+.dock {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: calc(100vw - 40px);
+  z-index: 6;
+  pointer-events: none;
+}
+
+.dock > * {
+  pointer-events: auto;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 28px;
+  background: rgba(28, 28, 30, 0.58);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
+}
+
+.item {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 64px;
+  height: 52px;
+  padding: 0 8px;
+  border-radius: 22px;
+  color: rgba(255, 255, 255, 0.6);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.item:hover {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+/* 选中态：浅色 tinted 胶囊（iOS 的 selected glass），不再叠额外高光 */
+.item[data-active='true'] {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+}
+
+.item:active {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.label {
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.separator {
+  width: 0.5px;
+  height: 28px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* 随机推荐：与主栏同一材质、同一圆角语言的独立胶囊 */
+.random {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 68px;
+  height: 64px;
+  border-radius: 24px;
+  background: rgba(28, 28, 30, 0.58);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.72);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.random:hover {
+  color: #fff;
+  background: rgba(44, 44, 46, 0.62);
+}
+
+.random:active {
+  background: rgba(58, 58, 60, 0.66);
+}
+
+/* 关闭玻璃时退化为实色，避免「半透明但没模糊」的脏底 */
+:global([data-glass='off']) .bar,
+:global([data-glass='off']) .random {
+  background: #26262a;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* 系统要求减少动态效果 */
+@media (prefers-reduced-motion: reduce) {
+  .item,
+  .random {
+    transition: none;
+  }
+}

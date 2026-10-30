@@ -1,6 +1,6 @@
 import { useMemo, type JSX } from 'react'
 import { useStore, useCurrentSongId, useIsPlaying } from '../state/store'
-import { buildAlbums, buildArtists, albumsSorted, songsOfAlbum } from '../lib/group'
+import { albumsOf, artistsOf, albumsSorted, songsOfAlbum } from '../lib/group'
 import { Cover } from '../components/Cover'
 import { Icon } from '../components/Icon'
 import { TrackTable } from '../components/TrackTable'
@@ -13,10 +13,10 @@ export function ArtistsView(): JSX.Element {
   const songIds = useStore((s) => s.songIds)
   const setView = useStore((s) => s.setView)
 
-  const list = useMemo(() => {
-    const all = songIds.map((id) => songs[id]).filter((s): s is NonNullable<typeof s> => Boolean(s))
-    return [...buildArtists(all).values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
-  }, [songIds, songs])
+  const list = useMemo(
+    () => [...artistsOf(songs, songIds).values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
+    [songIds, songs]
+  )
 
   return (
     <div className={styles.page}>
@@ -66,9 +66,8 @@ export function ArtistDetail({ name }: DetailProps): JSX.Element {
   const setContextMenu = useStore((s) => s.setContextMenu)
 
   const { albums, tracks } = useMemo(() => {
-    const all = songIds.map((id) => songs[id]).filter((s): s is NonNullable<typeof s> => Boolean(s))
-    const artist = buildArtists(all).get(name)
-    const albumMap = buildAlbums(all)
+    const artist = artistsOf(songs, songIds).get(name)
+    const albumMap = albumsOf(songs, songIds)
     const albumList = artist
       ? artist.albumKeys.map((key) => albumMap.get(key)).filter((a): a is NonNullable<typeof a> => Boolean(a))
       : []
