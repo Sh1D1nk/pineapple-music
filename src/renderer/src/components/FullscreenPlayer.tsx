@@ -71,15 +71,10 @@ export function FullscreenPlayer(): JSX.Element {
   const [upNextHidden, setUpNextHidden] = useState(false)
   const upNextTimer = useRef<number | null>(null)
 
-  // 过渡提示只在「真的在过渡」时说正在过渡；就绪时只做模式提示，其它状态一条都不显示。
-  // （此前是只要 AutoMix 开着就常驻一行「自动过渡」，bridge 卡住时还会永远停在过渡态。）
-  const automixStatus = useAutoMix((s) => s.status)
+  // 过渡文字只在**真的在过渡**时自动出现；就绪/待命/渲染中一律不显示。
+  // （此前「自动过渡」是常驻标签，看起来像状态机卡住了，已去掉。）
   const automixBridging = useAutoMix((s) => s.bridging)
-  const automixHint = automixBridging
-    ? { text: '正在过渡', hot: true }
-    : automixStatus === 'ready'
-      ? { text: '自动过渡', hot: false }
-      : null
+  const automixHint = automixBridging ? { text: '正在过渡', hot: true } : null
 
   // 歌词归属校验：store.lyrics 是异步加载的，切歌瞬间它还是上一首的载荷。
   // 不校验 songId 就会出现「标题是 B、歌词滚的是 A」的错位 —— 等新歌词到位再显示。

@@ -9,20 +9,23 @@ import {
 } from 'react'
 import { LiquidGlass } from 'apple-liquid-glass-webgl'
 import { Icon, type IconName } from './Icon'
-import { LiquidDropletFilter } from './LiquidDropletFilter'
 import { useStore } from '../state/store'
 import styles from './BottomBar.module.css'
 
 /**
- * 底部导航（液态玻璃主题）——形态对齐参考项目 Playground 的 Tab bar：
- *   一整条胶囊玻璃，图标/文字直接躺在上面；
- *   选中态 = 一颗**圆泡**（不是每格一颗水滴），停在选中格的圆心。
+ * 液态玻璃悬浮底栏。
  *
- * 手感：
- *   按下 → 圆泡放大并鼓出胶囊边缘（Playground 里那个凸起的圆）
- *   拖动 → 圆泡跟手移动，沿运动方向拉长、垂直压扁（扭曲），松手前不切页
- *   松手 → 圆泡飞到目标格、缩回原尺寸，落定后才切页
- *   点击 → 同一段飞行轨迹：放大 → 移动 → 缩小归位
+ * 规格照 Miuix 版管理器（LSPosed + MIUIX 主题的「悬浮底栏」）的实现：
+ *   `app/src/main/java/io/github/nexalloy/ui/liquid/FluidFloatingBottomBar.kt`
+ *
+ * 从那份源码里落下来的数值：
+ *   底栏 62dp / 指示器 48dp / 每个 tab 86dp / 左右内边距 6dp / 指示器左右 inset 4dp
+ *   指示器 = 横条，宽度在相邻 tab 之间按 progress 线性插值
+ *   拖出边界时按 0.25 倍位移（阻尼），可越界 0.3 格
+ *   速度变形 stretch = clamp(|v| * 0.08, 0, 0.14)，scaleX 1+stretch、scaleY 1-0.25*stretch
+ *   弹簧 spring(dampingRatio 0.78, stiffness 420)，松手吸附到最近 tab
+ *   图标随 proximity 从 0.65 亮度过渡到主色并放大 1.08×，标签 11sp 近距离加粗
+ *   材质 textureBlur(blurRadius 25) + 半透明底 30% + 1dp 白 12% 描边 + 8dp 投影
  */
 
 const NAV: {
@@ -54,19 +57,18 @@ const MATERIAL = {
   hairWidth: 0.55
 }
 
-/** 圆泡直径（px）。比轨道矮一点，按下放大到 1.3 就会鼓出边缘。 */
-const BUBBLE = 56
+/** 与 Kotlin 端 spring(0.78f, 420f) 等价的阻尼弹簧 */
+const SPRING_ZETA = 0.78
+const SPRING_OMEGA = Math.sqrt(420)
+/** 拖出边界时只走 0.25 倍（edge dampening） */
+const EDGE_DAMPING = 0.25
+/** 允许拖出 0.3 格 */
+const OVERSHOOT = 0.3
+/** 指示器左右各收 4dp */
+const PILL_INSET = 4
 
 const activeKeyOf = (kind: string): string =>
   kind === 'settings' ? 'settings' : kind === 'album' ? 'recent' : kind === 'artist' ? 'artists' : kind
-
-interface Bubble {
-  /** 圆心在 strip 坐标系里的 x */
-  x: number
-  sx: number
-  sy: number
-  skew: number
-}
 
 export function BottomBar(): JSX.Element {
   const view = useStore((s) => s.view)
@@ -79,26 +81,32 @@ export function BottomBar(): JSX.Element {
   const barRef = useRef<HTMLDivElement>(null)
   const randomRef = useRef<HTMLButtonElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
-  const stripRef = useRef<HTMLDivElement>(null)
-  const bubbleRef = useRef<HTMLSpanElement>(null)
   const tabRefs = useRef(new Map<string, HTMLButtonElement>())
+  const metricsRef = useRef<{ left: number; width: number }[]>([])
+
+  // 指示器位置（单位：tab index，可越界）
+  const [progress, setProgress] = useState(0)
+  const progressRef = useRef(0)
+  const velocityRef = useRef(0)
+  const targetRef = useRef(0)
+  const rafRef = useRef(0)
   const dragRef = useRef<{
     pointerId: number
     startX: number
-    startY: number
-    startCenter: number
+    startProgress: number
     moved: boolean
-    targetKey: string
+    lastX: number
+    lastT: number
   } | null>(null)
-
-  const [bubble, setBubble] = useState<Bubble | null>(null)
+  const dragCleanupRef = useRef<(() => void) | null>(null)
   const [dragging, setDragging] = useState(false)
-  const [pressed, setPressed] = useState(false)
-  const [hoverKey, setHoverKey] = useState<string | null>(null)
+  const [stretch, setStretch] = useState(0)
   const [webgl, setWebgl] = useState(false)
 
   const keys: string[] = NAV.map((entry) => entry.key as string)
   const activeKey = activeKeyOf(view.kind)
+  const activeIndex = Math.max(0, keys.indexOf(activeKey))
+  const lastIndex = keys.length - 1
 
   const activate = (key: string): void => {
     if (key === 'settings') {
@@ -109,172 +117,197 @@ export function BottomBar(): JSX.Element {
     setView({ kind: key } as never)
   }
 
-  /** 某格中心在 strip 坐标系里的位置 */
-  const centerOf = (key: string): number | null => {
-    const tab = tabRefs.current.get(key)
-    if (!tab) return null
-    return tab.offsetLeft + tab.offsetWidth / 2
-  }
+  // ---- 弹簧动画循环（半隐式欧拉，等价于 Compose 的 spring(0.78, 420)） ----
 
-  /** 指针落在哪一格 */
-  const tabAt = (clientX: number): string => {
-    const strip = stripRef.current
-    if (!strip) return activeKey
-    const x = clientX - strip.getBoundingClientRect().left
-    let best = activeKey
-    let bestDistance = Number.POSITIVE_INFINITY
-    for (const key of keys) {
-      const tab = tabRefs.current.get(key)
-      if (!tab) continue
-      const center = tab.offsetLeft + tab.offsetWidth / 2
-      const distance = Math.abs(x - center)
-      if (distance < bestDistance) {
-        bestDistance = distance
-        best = key
+  const runSpring = (target: number): void => {
+    targetRef.current = target
+    if (rafRef.current) return
+    let last = performance.now()
+    const tick = (now: number): void => {
+      const dt = Math.min(0.032, (now - last) / 1000)
+      last = now
+      const x = progressRef.current
+      const v = velocityRef.current
+      const accel = -2 * SPRING_ZETA * SPRING_OMEGA * v - SPRING_OMEGA * SPRING_OMEGA * (x - targetRef.current)
+      const nextV = v + accel * dt
+      const nextX = x + nextV * dt
+      progressRef.current = nextX
+      velocityRef.current = nextV
+      setProgress(nextX)
+      setStretch(Math.min(0.14, Math.abs(nextV) * 0.08))
+      if (Math.abs(nextX - targetRef.current) < 0.001 && Math.abs(nextV) < 0.05) {
+        progressRef.current = targetRef.current
+        velocityRef.current = 0
+        rafRef.current = 0
+        setProgress(targetRef.current)
+        setStretch(0)
+        return
       }
+      rafRef.current = requestAnimationFrame(tick)
     }
-    return best
+    rafRef.current = requestAnimationFrame(tick)
   }
 
-  // 圆泡停在选中格圆心；窗口尺寸/字体变化时重新对齐
+  // 选中项变化（外部触发，如键盘/其他入口）：弹簧滑过去
   useLayoutEffect(() => {
     if (dragRef.current) return
-    const center = centerOf(activeKey)
-    if (center !== null) setBubble({ x: center, sx: 1, sy: 1, skew: 0 })
+    const index = Math.max(0, keys.indexOf(activeKeyOf(view.kind)))
+    if (Math.abs(progressRef.current - index) > 0.001) runSpring(index)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKey, view.kind])
 
   useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      dragCleanupRef.current?.()
+    }
+  }, [])
+
+  // ---- 布局测量 ----
+
+  const measure = (): { left: number; width: number }[] => {
+    const list = keys.map((key) => {
+      const tab = tabRefs.current.get(key)
+      return tab ? { left: tab.offsetLeft, width: tab.offsetWidth } : { left: 0, width: 0 }
+    })
+    metricsRef.current = list
+    return list
+  }
+
+  useEffect(() => {
     const bar = barRef.current
     if (!bar) return undefined
+    measure()
+    setProgress(progressRef.current)
     const ro = new ResizeObserver(() => {
-      if (dragRef.current) return
-      const center = centerOf(activeKeyOf(useStore.getState().view.kind))
-      if (center !== null) setBubble({ x: center, sx: 1, sy: 1, skew: 0 })
+      measure()
+      setProgress(progressRef.current)
     })
     ro.observe(bar)
     return () => ro.disconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /** 指针落在哪个 tab（源码 indexAt 的等价实现） */
+  const indexAt = (clientX: number): number => {
+    const bar = barRef.current
+    const list = metricsRef.current
+    if (!bar || list.length === 0) return activeIndex
+    const x = clientX - bar.getBoundingClientRect().left
+    for (let i = 0; i < list.length; i++) {
+      const m = list[i]!
+      if (x >= m.left && x <= m.left + m.width) return i
+    }
+    return x < (list[0]?.left ?? 0) ? 0 : lastIndex
+  }
+
+  /** 拖拽过程中：按 tab 宽度换算 progress（源码 dragAmount.x / avgWidth） */
+  const dragMove = (clientX: number): void => {
+    const state = dragRef.current
+    if (!state) return
+    if (!state.moved) {
+      if (Math.abs(clientX - state.startX) < 4) return
+      state.moved = true
+    }
+    const list = metricsRef.current
+    const avgWidth = list.find((m) => m.width > 0)?.width ?? 86
+    const delta = (clientX - state.startX) / avgWidth
+    const next = Math.max(-OVERSHOOT, Math.min(lastIndex + OVERSHOOT, state.startProgress + delta))
+
+    const now = performance.now()
+    const dt = Math.max(1, now - state.lastT) / 1000
+    const instantVelocity = (next - progressRef.current) / dt
+    state.lastX = clientX
+    state.lastT = now
+
+    progressRef.current = next
+    velocityRef.current = instantVelocity
+    setProgress(next)
+    setStretch(Math.min(0.14, Math.abs(instantVelocity) * 0.08))
+  }
+
+  /** 松手：吸附到最近一格，弹簧归位，变了才切页 */
+  const dragEnd = (): void => {
+    const state = dragRef.current
+    dragRef.current = null
+    if (!state) return
+    setDragging(false)
+    const target = Math.max(0, Math.min(lastIndex, Math.round(progressRef.current)))
+    runSpring(target)
+    if (target !== activeIndex) activate(keys[target]!)
+  }
+
+  const dragCancel = (): void => {
+    dragRef.current = null
+    setDragging(false)
+    runSpring(activeIndex)
+  }
+
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0) return
-    const key = tabAt(event.clientX)
-    const center = centerOf(key)
-    if (center === null) return
     event.preventDefault()
-    const host = barRef.current
-    try {
-      host?.setPointerCapture(event.pointerId)
-    } catch {
-      /* 合成指针无法捕获 */
-    }
+    const index = indexAt(event.clientX)
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
-      startY: event.clientY,
-      startCenter: center,
+      startProgress: index,
       moved: false,
-      targetKey: key
+      lastX: event.clientX,
+      lastT: performance.now()
     }
-    setPressed(true)
+    // 按下立刻吸到手指下那一格（源码 onDragStarted → updateValue(indexAt)）
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = 0
+    }
+    velocityRef.current = 0
+    progressRef.current = index
+    targetRef.current = index
+    setProgress(index)
+    setStretch(0)
     setDragging(true)
-    setHoverKey(key)
-    // 按下即预览：圆泡鼓起来停在手指下，但页面还没切
-    setBubble({ x: center, sx: 1.3, sy: 1.16, skew: 0 })
-  }
 
-  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    const state = dragRef.current
-    const strip = stripRef.current
-    if (!state || !strip || event.pointerId !== state.pointerId) return
-    const dx = event.clientX - state.startX
-    if (!state.moved) {
-      if (Math.hypot(dx, event.clientY - state.startY) < 4) return
-      state.moved = true
+    // 用 window 级监听而不是 pointer capture：
+    // 捕获在鼠标移出元素时会被 Chromium 取消（pointercancel），进度会被打回起点。
+    const pointerId = event.pointerId
+    const move = (e: PointerEvent): void => {
+      if (e.pointerId === pointerId) dragMove(e.clientX)
     }
-    const target = tabAt(event.clientX)
-    state.targetKey = target
-    setHoverKey(target)
-    const rect = strip.getBoundingClientRect()
-    const x = event.clientX - rect.left
-    // 扭曲：沿拖动方向拉长、垂直压扁、带一点倾斜
-    const stretch = Math.min(1.42, 1.2 + Math.abs(dx) / 200)
-    const squash = Math.max(0.78, 1.12 - Math.abs(dx) / 500)
-    const skew = Math.max(-12, Math.min(12, dx / 14))
-    setBubble({ x, sx: stretch, sy: squash, skew })
-  }
-
-  const onPointerUp = async (event: ReactPointerEvent<HTMLDivElement>): Promise<void> => {
-    const state = dragRef.current
-    if (!state || event.pointerId !== state.pointerId) return
-    dragRef.current = null
-    const targetKey = state.targetKey
-    const targetCenter = centerOf(targetKey)
-    const from = bubble
-    setPressed(false)
-    setDragging(false)
-    setHoverKey(null)
-
-    // 点击与拖动都走同一条轨迹：放大 → 移动 → 缩回
-    if (from && targetCenter !== null && bubbleRef.current) {
-      const el = bubbleRef.current
-      const anim = el.animate(
-        [
-          {
-            transform: `translate(${from.x - BUBBLE / 2}px, -50%) scale(${from.sx}, ${from.sy}) skewX(${from.skew}deg)`,
-            offset: 0
-          },
-          {
-            transform: `translate(${(from.x + targetCenter) / 2 - BUBBLE / 2}px, -50%) scale(1.34, 1.26) skewX(0deg)`,
-            offset: 0.45
-          },
-          {
-            transform: `translate(${targetCenter - BUBBLE / 2}px, -50%) scale(1.12, 1.16) skewX(0deg)`,
-            offset: 0.8
-          },
-          {
-            transform: `translate(${targetCenter - BUBBLE / 2}px, -50%) scale(1, 1) skewX(0deg)`,
-            offset: 1
-          }
-        ],
-        {
-          duration: state.moved ? 420 : 520,
-          easing: 'cubic-bezier(0.2, 0.9, 0.25, 1)',
-          // 不能 fill:forwards —— 悬留的最终帧会一直压住内联 transform，
-          // 下一次按下就推不动圆泡了。动画结束由下面的 setBubble 接管最终位置。
-          fill: 'none'
-        }
-      )
-      await anim.finished.catch(() => undefined)
+    const up = (e: PointerEvent): void => {
+      if (e.pointerId !== pointerId) return
+      cleanup()
+      dragEnd()
     }
-    if (targetCenter !== null) setBubble({ x: targetCenter, sx: 1, sy: 1, skew: 0 })
-    if (targetKey !== activeKey) activate(targetKey)
-  }
-
-  const onPointerCancel = (): void => {
-    dragRef.current = null
-    setDragging(false)
-    setPressed(false)
-    setHoverKey(null)
-    const center = centerOf(activeKey)
-    if (center !== null) setBubble({ x: center, sx: 1, sy: 1, skew: 0 })
+    const cancel = (e: PointerEvent): void => {
+      if (e.pointerId !== pointerId) return
+      cleanup()
+      dragCancel()
+    }
+    const cleanup = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      dragCleanupRef.current = null
+    }
+    dragCleanupRef.current = cleanup
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
   }
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
-    const last = keys.length - 1
     const current = Math.max(0, keys.indexOf(activeKey))
     let next: number | null = null
     if (event.key === 'ArrowLeft') next = Math.max(0, current - 1)
-    else if (event.key === 'ArrowRight') next = Math.min(last, current + 1)
+    else if (event.key === 'ArrowRight') next = Math.min(lastIndex, current + 1)
     else if (event.key === 'Home') next = 0
-    else if (event.key === 'End') next = last
+    else if (event.key === 'End') next = lastIndex
     if (next === null) return
     event.preventDefault()
     activate(keys[next]!)
   }
 
-  // 横向滑动
+  // 横向滚动
   useEffect(() => {
     const track = trackRef.current
     if (!track) return undefined
@@ -287,7 +320,7 @@ export function BottomBar(): JSX.Element {
     return () => track.removeEventListener('wheel', onWheel)
   }, [])
 
-  // 玻璃轨道
+  // 玻璃轨道（液态玻璃材质，对应源码里的 textureBlur）
   useEffect(() => {
     const bar = barRef.current
     const random = randomRef.current
@@ -296,9 +329,9 @@ export function BottomBar(): JSX.Element {
     const options = {
       backdrop: 'auto' as const,
       shape: 'pill' as const,
-      tint: 0.42,
+      tint: 0.34,
       tintTone: 'dark' as const,
-      frost: 0.12,
+      frost: 0.2,
       maxDpr: 1.5,
       live: false,
       material: MATERIAL
@@ -352,9 +385,33 @@ export function BottomBar(): JSX.Element {
     playRandom()
   }
 
+  // ---- 指示器几何：相邻 tab 之间插值 + 边缘阻尼 ----
+
+  const metrics = metricsRef.current
+  const raw = ((): { left: number; width: number } => {
+    if (metrics.length === 0) return { left: 0, width: 86 }
+    if (progress <= 0) {
+      const m = metrics[0]!
+      return { left: m.left + progress * m.width * EDGE_DAMPING, width: m.width }
+    }
+    if (progress >= lastIndex) {
+      const m = metrics[lastIndex]!
+      const over = progress - lastIndex
+      return { left: m.left + over * m.width * EDGE_DAMPING, width: m.width }
+    }
+    const a = Math.floor(progress)
+    const fraction = progress - a
+    const b = Math.min(lastIndex, a + 1)
+    const ma = metrics[a]!
+    const mb = metrics[b]!
+    return {
+      left: ma.left + (mb.left - ma.left) * fraction,
+      width: ma.width + (mb.width - ma.width) * fraction
+    }
+  })()
+
   return (
     <nav className={styles.dock} aria-label="资料库导航" data-webgl={webgl ? '1' : '0'}>
-      <LiquidDropletFilter />
       <div
         className={styles.bar}
         ref={barRef}
@@ -363,28 +420,23 @@ export function BottomBar(): JSX.Element {
         tabIndex={-1}
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={(event) => void onPointerUp(event)}
-        onPointerCancel={onPointerCancel}
       >
         <div className={styles.track} ref={trackRef}>
-          <div className={styles.strip} ref={stripRef}>
-            {bubble && (
-              <span
-                ref={bubbleRef}
-                className={styles.bubble}
-                data-pressed={pressed ? 'true' : 'false'}
-                style={{
-                  transform: `translate(${bubble.x - BUBBLE / 2}px, -50%) scale(${bubble.sx}, ${bubble.sy}) skewX(${bubble.skew}deg)`,
-                  width: BUBBLE,
-                  height: BUBBLE,
-                  transition: dragging ? 'none' : undefined
-                }}
-                aria-hidden="true"
-              />
-            )}
-            {NAV.map((entry) => {
+          <div className={styles.strip}>
+            <span
+              className={styles.pill}
+              style={{
+                width: Math.max(0, raw.width - PILL_INSET * 2),
+                transform: `translateX(${raw.left + PILL_INSET}px) translateY(-50%) scaleX(${1 + stretch}) scaleY(${1 - stretch * 0.25})`
+              }}
+              data-dragging={dragging ? 'true' : 'false'}
+              aria-hidden="true"
+            />
+            {NAV.map((entry, index) => {
               const active = view.kind === entry.key || (entry.key === 'recent' && view.kind === 'album')
+              const distance = Math.abs(progress - index)
+              const proximity = Math.max(0, Math.min(1, 1 - distance))
+              const near = distance < 0.45
               return (
                 <button
                   key={entry.key}
@@ -393,19 +445,27 @@ export function BottomBar(): JSX.Element {
                   aria-selected={active}
                   data-nav={entry.key}
                   data-active={active}
-                  data-hover={hoverKey === entry.key && !active ? 'true' : 'false'}
                   ref={(el) => {
                     if (el) tabRefs.current.set(entry.key, el)
                     else tabRefs.current.delete(entry.key)
                   }}
                   className={styles.tab}
-                  onClick={(event) => {
-                    if (event.detail === 0) activate(entry.key)
+                  style={{ color: `rgba(255, 255, 255, ${(0.6 + proximity * 0.4).toFixed(3)})` }}
+                  onClick={() => {
+                    if (progressRef.current !== index) runSpring(index)
+                    activate(entry.key)
                   }}
                   title={entry.label}
                 >
-                  <Icon name={entry.icon} size={21} />
-                  <span className={styles.label}>{entry.label}</span>
+                  <span
+                    className={styles.icon}
+                    style={{ transform: `scale(${1 + proximity * 0.08})` }}
+                  >
+                    <Icon name={entry.icon} size={24} />
+                  </span>
+                  <span className={styles.label} style={{ fontWeight: near ? 600 : 400 }}>
+                    {entry.label}
+                  </span>
                 </button>
               )
             })}
