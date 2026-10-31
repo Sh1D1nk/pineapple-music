@@ -7,9 +7,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent
 } from 'react'
-import { LiquidGlass } from 'apple-liquid-glass-webgl'
+import { loadHyalite, type HyaliteAPI } from '../glass/hyalite'
 import { Icon, type IconName } from './Icon'
-import { LiquidDropletFilter } from './LiquidDropletFilter'
 import { useStore } from '../state/store'
 import styles from './BottomBar.module.css'
 
@@ -40,22 +39,37 @@ const NAV: {
   { key: 'settings', label: '设置', icon: 'gear' }
 ]
 
-const MATERIAL = {
-  // 底栏本身只留很轻的透视：折射范围收窄、边缘带变薄
-  refraction: 64,
-  edgeReach: 0.12,
-  edgeWidth: 0.16,
-  // 底栏几乎不色散（原版 0.12）；大色散只在气泡里
-  dispersion: 0.12,
-  body: 0.72,
-  absorption: 0.58,
-  rim: 0.16,
-  reflection: 0.2,
-  highlight: 0.18,
-  lightAngle: 136,
-  echo: 0.1,
-  hairline: 0.3,
-  hairWidth: 0.5
+/**
+ * 两套 hyalite 透镜参数（对齐 HeyBox 的「底栏弱色散、气泡强色散」分工）：
+ *   轨道 —— bevel 22 / thickness 36：边缘弯曲明显但克制，色散 0.8（很轻）
+ *   气泡 —— bevel 14 / thickness 30：小尺寸玻璃，色散 2.4（≈3 倍于底栏），边缘带更亮
+ */
+const BAR_LENS = {
+  bevel: 22,
+  thickness: 36,
+  dispersion: 0.8,
+  blur: 1,
+  slope: 2.6,
+  sat: 0.92,
+  shade: 0.34,
+  rim: 1.5,
+  edgeW: 6,
+  light: -140,
+  materialize: 180
+}
+
+const PILL_LENS = {
+  bevel: 14,
+  thickness: 30,
+  dispersion: 2.4,
+  blur: 0.5,
+  slope: 2.6,
+  sat: 0.95,
+  shade: 0.3,
+  rim: 1.9,
+  edgeW: 5,
+  light: -140,
+  materialize: 160
 }
 
 const EDGE_DAMPING = 0.25
@@ -70,6 +84,7 @@ export function BottomBar(): JSX.Element {
   const setView = useStore((s) => s.setView)
   const setSearch = useStore((s) => s.setSearch)
   const songIds = useStore((s) => s.songIds)
+  const glassMode = useStore((s) => s.settings.glass)
   const playRandom = useStore((s) => s.playRandom)
   const pushToast = useStore((s) => s.pushToast)
 
@@ -316,62 +331,42 @@ export function BottomBar(): JSX.Element {
     return () => track.removeEventListener('wheel', onWheel)
   }, [])
 
-  // 玻璃轨道
+  // 玻璃：轨道与气泡都挂 hyalite（真实折射 + 边缘 rim 光；vendor/hyalite，MIT）。
+  // 气泡透镜参数独立（更强色散）；卸载时 detach，避免残留指向已删 SVG 的 filter。
   useEffect(() => {
-    const bar = barRef.current
-    const random = randomRef.current
-    if (!bar) return undefined
-    const instances: { destroy: () => void; refresh?: () => void }[] = []
-    const options = {
-      backdrop: 'auto' as const,
-      shape: 'pill' as const,
-      tint: 0.34,
-      tintTone: 'dark' as const,
-      frost: 0.2,
-      maxDpr: 1.5,
-      live: false,
-      material: MATERIAL
-    }
-    let timer = 0
-    const scroller = document.getElementById('contentScroll')
-    const onScroll = (): void => {
-      if (timer) window.clearTimeout(timer)
-      timer = window.setTimeout(() => {
-        for (const instance of instances) {
-          try {
-            instance.refresh?.()
-          } catch {
-            /* 实例已销毁 */
-          }
-        }
-      }, 160)
-    }
-    try {
-      if (!LiquidGlass.isSupported()) throw new Error('no webgl2')
-      instances.push(new LiquidGlass(bar, options) as { destroy: () => void; refresh?: () => void })
-      if (random) {
-        instances.push(new LiquidGlass(random, { ...options, tint: 0.2 }) as {
-          destroy: () => void
-          refresh?: () => void
-        })
-      }
-      scroller?.addEventListener('scroll', onScroll, { passive: true })
-      setWebgl(true)
-    } catch {
+    let disposed = false
+    const attached: { el: Element; api: HyaliteAPI }[] = []
+    if (glassMode === 'off') {
       setWebgl(false)
+      return
     }
+    void loadHyalite().then((api) => {
+      if (disposed || !api) return
+      const bar = barRef.current
+      const pill = pillRef.current
+      if (bar) {
+        api.attach(bar, BAR_LENS)
+        attached.push({ el: bar, api })
+      }
+      if (pill) {
+        api.attach(pill, PILL_LENS)
+        attached.push({ el: pill, api })
+      }
+      setWebgl(api.supported())
+    })
     return () => {
-      scroller?.removeEventListener('scroll', onScroll)
-      if (timer) window.clearTimeout(timer)
-      for (const instance of instances) {
+      disposed = true
+      for (const { el, api } of attached) {
         try {
-          instance.destroy()
+          api.detach(el)
         } catch {
-          /* 上下文已被接管则忽略 */
+          /* 未挂载则忽略 */
         }
+        ;(el as HTMLElement).style.removeProperty('--hyalite')
+        ;(el as HTMLElement).style.removeProperty('--hyalite-edge')
       }
     }
-  }, [])
+  }, [glassMode])
 
   const onRandom = (): void => {
     if (songIds.length === 0) {
@@ -412,7 +407,6 @@ export function BottomBar(): JSX.Element {
 
   return (
     <nav className={styles.dock} aria-label="资料库导航" data-webgl={webgl ? '1' : '0'}>
-      <LiquidDropletFilter />
       <div
         className={styles.bar}
         ref={barRef}

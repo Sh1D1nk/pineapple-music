@@ -34,6 +34,12 @@
   box-sizing: border-box;
   touch-action: none;
   user-select: none;
+  /* hyalite：真实折射（SDF 位移图）+ 边缘 rim 光；
+     不支持 SVG backdrop-filter 的环境自动退回毛玻璃（var 的回退值） */
+  backdrop-filter: var(--hyalite, blur(22px) saturate(170%));
+  -webkit-backdrop-filter: var(--hyalite, blur(22px) saturate(170%));
+  box-shadow: var(--hyalite-edge, none), 0 12px 32px rgba(0, 0, 0, 0.32);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* ------------------------------------------------------------------ 横向轨道 */
@@ -90,13 +96,11 @@
   /* 胶囊圆角 + clip-path 双保险：任何缩放下四角都干净，不会露出直角 */
   border-radius: 28px;
   clip-path: inset(0 round 28px);
-  /* 原版气泡只有一层均匀 tint + 细描边；折射/色散/模糊全在 filter 里 */
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: url(#lg-droplet) saturate(1.9) brightness(1.06);
-  -webkit-backdrop-filter: url(#lg-droplet) saturate(1.9) brightness(1.06);
-  box-shadow:
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.08),
-    0 4px 14px rgba(0, 0, 0, 0.22);
+  /* 气泡的透镜参数（bevel 14 / dispersion 2.4）比轨道更「凸」，色散 ≈3 倍于底栏 */
+  backdrop-filter: var(--hyalite, blur(3px) saturate(160%));
+  -webkit-backdrop-filter: var(--hyalite, blur(3px) saturate(160%));
+  box-shadow: var(--hyalite-edge, none), 0 4px 14px rgba(0, 0, 0, 0.22);
   transform-origin: center center;
   transform: scale(1);
   pointer-events: none;
@@ -155,11 +159,20 @@
 
 /* -------------------------------------------------------------------- 回退态 */
 
-.dock[data-webgl='1'] .bar {
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+.dock[data-webgl='0'] .bar {
+  background: rgba(28, 28, 30, 0.55);
+  backdrop-filter: blur(25px) saturate(170%);
+  -webkit-backdrop-filter: blur(25px) saturate(170%);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.dock[data-webgl='0'] .pill {
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(6px) saturate(160%);
+  -webkit-backdrop-filter: blur(6px) saturate(160%);
 }
 
 .dock[data-webgl='1'] .bar::after {
@@ -199,23 +212,7 @@
   color: #fff;
 }
 
-.dock[data-webgl='1'] .random {
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
-}
-
-.dock[data-webgl='1'] .random::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-}
-
-.dock[data-webgl='0'] .random {
+.random {
   background: rgba(28, 28, 30, 0.55);
   backdrop-filter: blur(25px) saturate(170%);
   -webkit-backdrop-filter: blur(25px) saturate(170%);

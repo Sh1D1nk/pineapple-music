@@ -36,7 +36,6 @@
     "@pixi/filter-color-matrix": "7.4.3",
     "@pixi/sprite": "7.4.3",
     "@tanstack/react-virtual": "3.14.22",
-    "apple-liquid-glass-webgl": "^2.6.0",
     "better-sqlite3": "13.0.3",
     "chardet": "2.2.0",
     "iconv-lite": "0.7.3",
