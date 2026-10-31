@@ -9,24 +9,24 @@ import {
 } from 'react'
 import { LiquidGlass } from 'apple-liquid-glass-webgl'
 import { Icon, type IconName } from './Icon'
+import { LiquidDropletFilter } from './LiquidDropletFilter'
 import { useStore } from '../state/store'
 import styles from './BottomBar.module.css'
 
 /**
- * 底部导航（液态玻璃主题专用）。
+ * 底部导航（液态玻璃主题）——形态对齐参考项目 Playground 的 Tab bar：
+ *   一整条胶囊玻璃，图标/文字直接躺在上面；
+ *   选中态 = 一颗**圆泡**（不是每格一颗水滴），停在选中格的圆心。
  *
- * 交互照参考实现的 LiquidGlassNavbar 做，不是「点一下换个底色」：
- *   按下      → 透镜立刻胀大并滑到手指下那一格（还没松手，选中还没变）
- *   拖动      → 位移超过 4px 才算拖，之后透镜跟手连续移动，可以停在两格之间
- *   松手      → 吸附到最近一格，这时才真正切页；按已选中的格子是原地开花 + 无操作
- *   取消      → pointercancel 撤回按下前的选中
- *   键盘      → ←/→ 上一项/下一项，Home/End 首尾，直接生效
- *
- * 玻璃是 WebGL2 画的（LiquidGlass 只画玻璃、不接管 DOM），没有 WebGL2 时退回 CSS 玻璃。
+ * 手感：
+ *   按下 → 圆泡放大并鼓出胶囊边缘（Playground 里那个凸起的圆）
+ *   拖动 → 圆泡跟手移动，沿运动方向拉长、垂直压扁（扭曲），松手前不切页
+ *   松手 → 圆泡飞到目标格、缩回原尺寸，落定后才切页
+ *   点击 → 同一段飞行轨迹：放大 → 移动 → 缩小归位
  */
 
 const NAV: {
-  key: 'recent' | 'artists' | 'albums' | 'songs' | 'favorites'
+  key: 'recent' | 'artists' | 'albums' | 'songs' | 'favorites' | 'settings'
   label: string
   icon: IconName
 }[] = [
@@ -34,10 +34,10 @@ const NAV: {
   { key: 'artists', label: '艺人', icon: 'mic' },
   { key: 'albums', label: '专辑', icon: 'disc' },
   { key: 'songs', label: '歌曲', icon: 'music' },
-  { key: 'favorites', label: '收藏', icon: 'star' }
+  { key: 'favorites', label: '收藏', icon: 'star' },
+  { key: 'settings', label: '设置', icon: 'gear' }
 ]
 
-/** 参考实现的材质取向：体折射为主、边缘带一点色散，rim/highlight 给足，光从左上打（136°）。 */
 const MATERIAL = {
   refraction: 84,
   edgeReach: 0.16,
@@ -54,13 +54,18 @@ const MATERIAL = {
   hairWidth: 0.55
 }
 
+/** 圆泡直径（px）。比轨道矮一点，按下放大到 1.3 就会鼓出边缘。 */
+const BUBBLE = 56
+
 const activeKeyOf = (kind: string): string =>
   kind === 'settings' ? 'settings' : kind === 'album' ? 'recent' : kind === 'artist' ? 'artists' : kind
 
-interface Metric {
-  key: string
-  left: number
-  width: number
+interface Bubble {
+  /** 圆心在 strip 坐标系里的 x */
+  x: number
+  sx: number
+  sy: number
+  skew: number
 }
 
 export function BottomBar(): JSX.Element {
@@ -73,25 +78,27 @@ export function BottomBar(): JSX.Element {
 
   const barRef = useRef<HTMLDivElement>(null)
   const randomRef = useRef<HTMLButtonElement>(null)
-  const itemRefs = useRef(new Map<string, HTMLButtonElement>())
-  const metricsRef = useRef<Metric[]>([])
+  const trackRef = useRef<HTMLDivElement>(null)
+  const stripRef = useRef<HTMLDivElement>(null)
+  const bubbleRef = useRef<HTMLSpanElement>(null)
+  const tabRefs = useRef(new Map<string, HTMLButtonElement>())
   const dragRef = useRef<{
     pointerId: number
-    x0: number
-    y0: number
-    startIndex: number
+    startX: number
+    startY: number
+    startCenter: number
     moved: boolean
-    width: number
+    targetKey: string
   } | null>(null)
 
-  const [lens, setLens] = useState<{ left: number; width: number } | null>(null)
+  const [bubble, setBubble] = useState<Bubble | null>(null)
   const [dragging, setDragging] = useState(false)
   const [pressed, setPressed] = useState(false)
+  const [hoverKey, setHoverKey] = useState<string | null>(null)
   const [webgl, setWebgl] = useState(false)
 
-  const keys: string[] = [...NAV.map((entry) => entry.key as string), 'settings']
+  const keys: string[] = NAV.map((entry) => entry.key as string)
   const activeKey = activeKeyOf(view.kind)
-  const activeIndex = Math.max(0, keys.indexOf(activeKey))
 
   const activate = (key: string): void => {
     if (key === 'settings') {
@@ -102,22 +109,38 @@ export function BottomBar(): JSX.Element {
     setView({ kind: key } as never)
   }
 
-  /** 读真实布局：窗口缩放、字号变化、标签变化都不会让透镜错位 */
-  const measure = (): Metric[] => {
-    const list: Metric[] = []
-    for (const key of keys) {
-      const el = itemRefs.current.get(key)
-      if (el) list.push({ key, left: el.offsetLeft, width: el.offsetWidth })
-    }
-    metricsRef.current = list
-    return list
+  /** 某格中心在 strip 坐标系里的位置 */
+  const centerOf = (key: string): number | null => {
+    const tab = tabRefs.current.get(key)
+    if (!tab) return null
+    return tab.offsetLeft + tab.offsetWidth / 2
   }
 
+  /** 指针落在哪一格 */
+  const tabAt = (clientX: number): string => {
+    const strip = stripRef.current
+    if (!strip) return activeKey
+    const x = clientX - strip.getBoundingClientRect().left
+    let best = activeKey
+    let bestDistance = Number.POSITIVE_INFINITY
+    for (const key of keys) {
+      const tab = tabRefs.current.get(key)
+      if (!tab) continue
+      const center = tab.offsetLeft + tab.offsetWidth / 2
+      const distance = Math.abs(x - center)
+      if (distance < bestDistance) {
+        bestDistance = distance
+        best = key
+      }
+    }
+    return best
+  }
+
+  // 圆泡停在选中格圆心；窗口尺寸/字体变化时重新对齐
   useLayoutEffect(() => {
-    const list = measure()
-    const hit = list.find((m) => m.key === activeKey) ?? list[0]
-    if (hit) setLens({ left: hit.left, width: hit.width })
-    // keys 由常量派生，长度固定
+    if (dragRef.current) return
+    const center = centerOf(activeKey)
+    if (center !== null) setBubble({ x: center, sx: 1, sy: 1, skew: 0 })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKey, view.kind])
 
@@ -125,103 +148,125 @@ export function BottomBar(): JSX.Element {
     const bar = barRef.current
     if (!bar) return undefined
     const ro = new ResizeObserver(() => {
-      const list = measure()
-      const hit = list.find((m) => m.key === activeKeyOf(useStore.getState().view.kind)) ?? list[0]
-      if (hit) setLens({ left: hit.left, width: hit.width })
+      if (dragRef.current) return
+      const center = centerOf(activeKeyOf(useStore.getState().view.kind))
+      if (center !== null) setBubble({ x: center, sx: 1, sy: 1, skew: 0 })
     })
     ro.observe(bar)
     return () => ro.disconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ---- 指针：按下预览 / 拖动跟手 / 松手吸附 ---------------------------------
-
-  const indexAt = (clientX: number): number => {
-    const bar = barRef.current
-    const list = metricsRef.current
-    if (!bar || list.length === 0) return 0
-    const x = clientX - bar.getBoundingClientRect().left
-    let best = 0
-    let bestDistance = Number.POSITIVE_INFINITY
-    list.forEach((metric, index) => {
-      const distance = Math.abs(x - (metric.left + metric.width / 2))
-      if (distance < bestDistance) {
-        bestDistance = distance
-        best = index
-      }
-    })
-    return best
-  }
-
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0) return
-    const bar = barRef.current
-    if (!bar) return
-    // 自己接管整个手势：阻止文本选择与后续兼容 click，避免与 click 逻辑双触发
+    const key = tabAt(event.clientX)
+    const center = centerOf(key)
+    if (center === null) return
     event.preventDefault()
+    const host = barRef.current
     try {
-      bar.setPointerCapture(event.pointerId)
+      host?.setPointerCapture(event.pointerId)
     } catch {
-      /* 合成的 pointer 无法捕获 */
+      /* 合成指针无法捕获 */
     }
-    // 和参考实现一样：按过之后焦点落在轨道上，方向键立刻可用
-    bar.focus({ preventScroll: true })
-    const index = indexAt(event.clientX)
-    const metric = metricsRef.current[index]
-    if (!metric) return
     dragRef.current = {
       pointerId: event.pointerId,
-      x0: event.clientX,
-      y0: event.clientY,
-      startIndex: activeIndex,
+      startX: event.clientX,
+      startY: event.clientY,
+      startCenter: center,
       moved: false,
-      width: metric.width
+      targetKey: key
     }
     setPressed(true)
     setDragging(true)
-    // 按下即预览：透镜先胀着滑到手指下（此时还没切页）
-    setLens({ left: metric.left, width: metric.width })
+    setHoverKey(key)
+    // 按下即预览：圆泡鼓起来停在手指下，但页面还没切
+    setBubble({ x: center, sx: 1.3, sy: 1.16, skew: 0 })
   }
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
     const state = dragRef.current
-    const bar = barRef.current
-    if (!state || !bar || event.pointerId !== state.pointerId) return
+    const strip = stripRef.current
+    if (!state || !strip || event.pointerId !== state.pointerId) return
+    const dx = event.clientX - state.startX
     if (!state.moved) {
-      // 4px 以内算点击，不算拖动（否则轻按一抖就跑偏）
-      if (Math.hypot(event.clientX - state.x0, event.clientY - state.y0) < 4) return
+      if (Math.hypot(dx, event.clientY - state.startY) < 4) return
       state.moved = true
     }
-    const rect = bar.getBoundingClientRect()
-    const raw = event.clientX - rect.left - state.width / 2
-    const max = bar.clientWidth - 6 - state.width
-    setLens({ left: Math.max(6, Math.min(max, raw)), width: state.width })
+    const target = tabAt(event.clientX)
+    state.targetKey = target
+    setHoverKey(target)
+    const rect = strip.getBoundingClientRect()
+    const x = event.clientX - rect.left
+    // 扭曲：沿拖动方向拉长、垂直压扁、带一点倾斜
+    const stretch = Math.min(1.42, 1.2 + Math.abs(dx) / 200)
+    const squash = Math.max(0.78, 1.12 - Math.abs(dx) / 500)
+    const skew = Math.max(-12, Math.min(12, dx / 14))
+    setBubble({ x, sx: stretch, sy: squash, skew })
   }
 
-  const finishGesture = (event: ReactPointerEvent<HTMLDivElement>, cancelled: boolean): void => {
+  const onPointerUp = async (event: ReactPointerEvent<HTMLDivElement>): Promise<void> => {
     const state = dragRef.current
     if (!state || event.pointerId !== state.pointerId) return
     dragRef.current = null
-    setDragging(false)
+    const targetKey = state.targetKey
+    const targetCenter = centerOf(targetKey)
+    const from = bubble
     setPressed(false)
-    const list = metricsRef.current
-    const targetIndex = cancelled ? state.startIndex : indexAt(event.clientX)
-    const target = list[targetIndex] ?? list[activeIndex]
-    if (target) setLens({ left: target.left, width: target.width })
-    // 取消 → 回原项；点已选中 → 原地开花后无操作；否则切页
-    if (cancelled) return
-    if (target?.key === activeKey && !state.moved) return
-    if (target) activate(target.key)
+    setDragging(false)
+    setHoverKey(null)
+
+    // 点击与拖动都走同一条轨迹：放大 → 移动 → 缩回
+    if (from && targetCenter !== null && bubbleRef.current) {
+      const el = bubbleRef.current
+      const anim = el.animate(
+        [
+          {
+            transform: `translate(${from.x - BUBBLE / 2}px, -50%) scale(${from.sx}, ${from.sy}) skewX(${from.skew}deg)`,
+            offset: 0
+          },
+          {
+            transform: `translate(${(from.x + targetCenter) / 2 - BUBBLE / 2}px, -50%) scale(1.34, 1.26) skewX(0deg)`,
+            offset: 0.45
+          },
+          {
+            transform: `translate(${targetCenter - BUBBLE / 2}px, -50%) scale(1.12, 1.16) skewX(0deg)`,
+            offset: 0.8
+          },
+          {
+            transform: `translate(${targetCenter - BUBBLE / 2}px, -50%) scale(1, 1) skewX(0deg)`,
+            offset: 1
+          }
+        ],
+        {
+          duration: state.moved ? 420 : 520,
+          easing: 'cubic-bezier(0.2, 0.9, 0.25, 1)',
+          // 不能 fill:forwards —— 悬留的最终帧会一直压住内联 transform，
+          // 下一次按下就推不动圆泡了。动画结束由下面的 setBubble 接管最终位置。
+          fill: 'none'
+        }
+      )
+      await anim.finished.catch(() => undefined)
+    }
+    if (targetCenter !== null) setBubble({ x: targetCenter, sx: 1, sy: 1, skew: 0 })
+    if (targetKey !== activeKey) activate(targetKey)
   }
 
-  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>): void => finishGesture(event, false)
-  const onPointerCancel = (event: ReactPointerEvent<HTMLDivElement>): void => finishGesture(event, true)
+  const onPointerCancel = (): void => {
+    dragRef.current = null
+    setDragging(false)
+    setPressed(false)
+    setHoverKey(null)
+    const center = centerOf(activeKey)
+    if (center !== null) setBubble({ x: center, sx: 1, sy: 1, skew: 0 })
+  }
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     const last = keys.length - 1
+    const current = Math.max(0, keys.indexOf(activeKey))
     let next: number | null = null
-    if (event.key === 'ArrowLeft') next = Math.max(0, activeIndex - 1)
-    else if (event.key === 'ArrowRight') next = Math.min(last, activeIndex + 1)
+    if (event.key === 'ArrowLeft') next = Math.max(0, current - 1)
+    else if (event.key === 'ArrowRight') next = Math.min(last, current + 1)
     else if (event.key === 'Home') next = 0
     else if (event.key === 'End') next = last
     if (next === null) return
@@ -229,8 +274,20 @@ export function BottomBar(): JSX.Element {
     activate(keys[next]!)
   }
 
-  // ---- 玻璃 -----------------------------------------------------------------
+  // 横向滑动
+  useEffect(() => {
+    const track = trackRef.current
+    if (!track) return undefined
+    const onWheel = (event: WheelEvent): void => {
+      if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return
+      track.scrollLeft += event.deltaY
+      event.preventDefault()
+    }
+    track.addEventListener('wheel', onWheel, { passive: false })
+    return () => track.removeEventListener('wheel', onWheel)
+  }, [])
 
+  // 玻璃轨道
   useEffect(() => {
     const bar = barRef.current
     const random = randomRef.current
@@ -238,16 +295,11 @@ export function BottomBar(): JSX.Element {
     const instances: { destroy: () => void; refresh?: () => void }[] = []
     const options = {
       backdrop: 'auto' as const,
-      // 精确胶囊 SDF（参考项目的 Dock 就是 shape: 'pill'）。虽然 CSS 圆角取半高时
-      // 几何等价，但 pill 的距离场在两端给出连续曲率，法线/高光不会在圆角接缝处跳变。
       shape: 'pill' as const,
-      // 白字压在玻璃上：tint 保证可读，frost 只留一点点——
-      // 模糊给多了就把折射糊成磨砂，底边那圈弯曲的内容才是液态玻璃的签名
-      tint: 0.45,
+      tint: 0.42,
       tintTone: 'dark' as const,
       frost: 0.12,
       maxDpr: 1.5,
-      // 滚动时不逐帧重绘 DOM 背景（那是纯 CPU 的 paint），停手 160ms 后补一帧
       live: false,
       material: MATERIAL
     }
@@ -277,7 +329,6 @@ export function BottomBar(): JSX.Element {
       scroller?.addEventListener('scroll', onScroll, { passive: true })
       setWebgl(true)
     } catch {
-      // 没有 WebGL2（或上下文创建失败）：保持 CSS 玻璃，功能不受影响
       setWebgl(false)
     }
     return () => {
@@ -303,78 +354,63 @@ export function BottomBar(): JSX.Element {
 
   return (
     <nav className={styles.dock} aria-label="资料库导航" data-webgl={webgl ? '1' : '0'}>
+      <LiquidDropletFilter />
       <div
         className={styles.bar}
         ref={barRef}
         role="tablist"
         aria-label="资料库分区"
         tabIndex={-1}
+        onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
+        onPointerUp={(event) => void onPointerUp(event)}
         onPointerCancel={onPointerCancel}
-        onKeyDown={onKeyDown}
       >
-        {lens && (
-          <span
-            className={styles.lens}
-            data-pressed={pressed ? 'true' : 'false'}
-            style={{
-              transform: `translateX(${lens.left}px)${pressed ? ' scale(1.08, 1.16)' : ''}`,
-              width: lens.width,
-              transition: dragging ? 'none' : undefined
-            }}
-            aria-hidden="true"
-          />
-        )}
-        {NAV.map((entry) => {
-          const active = view.kind === entry.key || (entry.key === 'recent' && view.kind === 'album')
-          return (
-            <button
-              key={entry.key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              data-nav={entry.key}
-              data-active={active}
-              ref={(el) => {
-                if (el) itemRefs.current.set(entry.key, el)
-                else itemRefs.current.delete(entry.key)
-              }}
-              className={styles.item}
-              // 鼠标手势由容器的 pointer 逻辑处理；这里只接键盘触发的 click（detail === 0）
-              onClick={(event) => {
-                if (event.detail === 0) activate(entry.key)
-              }}
-              title={entry.label}
-            >
-              <Icon name={entry.icon} size={22} />
-              <span className={styles.label}>{entry.label}</span>
-            </button>
-          )
-        })}
-
-        <span className={styles.separator} aria-hidden="true" />
-
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view.kind === 'settings'}
-          data-nav="settings"
-          data-active={view.kind === 'settings'}
-          ref={(el) => {
-            if (el) itemRefs.current.set('settings', el)
-            else itemRefs.current.delete('settings')
-          }}
-          className={styles.item}
-          onClick={(event) => {
-            if (event.detail === 0) activate('settings')
-          }}
-          title="设置"
-        >
-          <Icon name="gear" size={21} />
-          <span className={styles.label}>设置</span>
-        </button>
+        <div className={styles.track} ref={trackRef}>
+          <div className={styles.strip} ref={stripRef}>
+            {bubble && (
+              <span
+                ref={bubbleRef}
+                className={styles.bubble}
+                data-pressed={pressed ? 'true' : 'false'}
+                style={{
+                  transform: `translate(${bubble.x - BUBBLE / 2}px, -50%) scale(${bubble.sx}, ${bubble.sy}) skewX(${bubble.skew}deg)`,
+                  width: BUBBLE,
+                  height: BUBBLE,
+                  transition: dragging ? 'none' : undefined
+                }}
+                aria-hidden="true"
+              />
+            )}
+            {NAV.map((entry) => {
+              const active = view.kind === entry.key || (entry.key === 'recent' && view.kind === 'album')
+              return (
+                <button
+                  key={entry.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  data-nav={entry.key}
+                  data-active={active}
+                  data-hover={hoverKey === entry.key && !active ? 'true' : 'false'}
+                  ref={(el) => {
+                    if (el) tabRefs.current.set(entry.key, el)
+                    else tabRefs.current.delete(entry.key)
+                  }}
+                  className={styles.tab}
+                  onClick={(event) => {
+                    if (event.detail === 0) activate(entry.key)
+                  }}
+                  title={entry.label}
+                >
+                  <Icon name={entry.icon} size={21} />
+                  <span className={styles.label}>{entry.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       <button
