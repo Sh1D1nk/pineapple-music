@@ -64,6 +64,10 @@ export function Cover({ coverId, size, display, radius, className, alt = '', pri
           draggable={false}
           loading={priority ? 'eager' : 'lazy'}
           decoding="async"
+          // 液态玻璃的 backdrop 会把这张图重绘进 canvas 当折射源；
+          // 不声明 crossOrigin 的跨源图会污染 canvas，纹理上传直接抛 SecurityError。
+          // amcover:// 协议已返回 Access-Control-Allow-Origin: *，同源/data: 图不受影响。
+          crossOrigin="anonymous"
           onLoad={() => setReady(true)}
           onError={() => setReady(false)}
         />
