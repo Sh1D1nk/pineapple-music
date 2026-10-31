@@ -41,9 +41,10 @@ const NAV: {
 ]
 
 const MATERIAL = {
-  refraction: 84,
-  edgeReach: 0.16,
-  edgeWidth: 0.22,
+  // 底栏本身只留很轻的透视：折射范围收窄、边缘带变薄
+  refraction: 64,
+  edgeReach: 0.12,
+  edgeWidth: 0.16,
   // 底栏几乎不色散（原版 0.12）；大色散只在气泡里
   dispersion: 0.12,
   body: 0.72,
@@ -74,6 +75,8 @@ export function BottomBar(): JSX.Element {
 
   const barRef = useRef<HTMLDivElement>(null)
   const pillRef = useRef<HTMLSpanElement>(null)
+  const pillWrapRef = useRef<HTMLSpanElement>(null)
+  const tapRef = useRef<{ pointerId: number; x: number; y: number } | null>(null)
   const randomRef = useRef<HTMLButtonElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef(new Map<string, HTMLButtonElement>())
@@ -218,6 +221,30 @@ export function BottomBar(): JSX.Element {
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0) return
     event.preventDefault()
+
+    // 只有按在气泡范围内才进入「长按 + 拖动」；按在别处只是一次普通点击
+    const bubble = pillRef.current?.getBoundingClientRect()
+    const insideBubble =
+      bubble &&
+      event.clientX >= bubble.left &&
+      event.clientX <= bubble.right &&
+      event.clientY >= bubble.top &&
+      event.clientY <= bubble.bottom
+    if (!insideBubble) {
+      tapRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
+      const finishTap = (e: PointerEvent): void => {
+        if (e.pointerId !== event.pointerId) return
+        window.removeEventListener('pointerup', finishTap)
+        window.removeEventListener('pointercancel', finishTap)
+        tapRef.current = null
+        const index = indexAt(e.clientX)
+        if (index !== activeIndex) activate(keys[index]!)
+      }
+      window.addEventListener('pointerup', finishTap)
+      window.addEventListener('pointercancel', finishTap)
+      return
+    }
+
     // 按住只放大，气泡留在原位；只有真的拖起来才移动（避免按下瞬间跳格）
     dragRef.current = {
       pointerId: event.pointerId,
@@ -357,6 +384,7 @@ export function BottomBar(): JSX.Element {
   // ---- 几何：相邻 tab 之间插值 + 边缘阻尼 ----
 
   const metrics = metricsRef.current
+  const barWidth = barRef.current?.clientWidth ?? 0
   const raw = ((): { left: number; width: number } => {
     if (metrics.length === 0) return { left: 0, width: 86 }
     if (progress <= 0) {
@@ -376,6 +404,12 @@ export function BottomBar(): JSX.Element {
     return { left: ma.left + (mb.left - ma.left) * f, width: ma.width + (mb.width - ma.width) * f }
   })()
 
+  // 气泡夹在底栏内：越界时它贴着内边距，不会和胶囊圆角糊成一块
+  const pillLeft = Math.max(
+    6,
+    Math.min(Math.max(6, barWidth - 6 - raw.width), raw.left + trackOffset - scrollLeft + PILL_INSET)
+  )
+
   return (
     <nav className={styles.dock} aria-label="资料库导航" data-webgl={webgl ? '1' : '0'}>
       <LiquidDropletFilter />
@@ -388,18 +422,19 @@ export function BottomBar(): JSX.Element {
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
       >
-        {/* 气泡在 track 之外：track 是滚动容器，会把越界的气泡裁掉 */}
+        {/* 气泡分两层：wrap 只负责位移（不会被缩发放大），pill 只负责缩放与玻璃材质 */}
         <span
-          ref={pillRef}
-          className={styles.pill}
+          ref={pillWrapRef}
+          className={styles.pillWrap}
           data-dragging={dragging ? 'true' : 'false'}
           style={{
             width: Math.max(0, raw.width - PILL_INSET * 2),
-            transform: `translateX(${raw.left + trackOffset - scrollLeft + PILL_INSET}px) scaleX(${1 + stretch}) scaleY(${1 - stretch * 0.25})`,
-            scale: pressed ? '1.28' : '1'
+            transform: `translateX(${pillLeft}px) scaleX(${1 + stretch}) scaleY(${1 - stretch * 0.25})`
           }}
           aria-hidden="true"
-        />
+        >
+          <span ref={pillRef} className={styles.pill} data-pressed={pressed ? 'true' : 'false'} />
+        </span>
         <div className={styles.track} ref={trackRef}>
           <div className={styles.strip}>
             {NAV.map((entry, index) => {
