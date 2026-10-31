@@ -34,6 +34,12 @@ export function stftProfileFor(bins: number): StftOptions | null {
       return { nFft: 8192, hop: 2048, center: true }
     case 4096:
       return { nFft: 8192, hop: 2048, center: false }
+    // 6144 点 STFT：MDX-Net 的 dim_f=3072 一族（如 VOC-FT）。6144 = 2^11 × 3，
+    // 不是 2 的幂 —— 由下面的 Bluestein 任意长度 FFT 支撑。
+    case 3073:
+      return { nFft: 6144, hop: 1024, center: true }
+    case 3072:
+      return { nFft: 6144, hop: 1024, center: false }
     default:
       return null
   }
@@ -91,6 +97,81 @@ export function fftInPlace(re: Float32Array, im: Float32Array): void {
   }
 }
 
+/**
+ * Bluestein（chirp-z）算法：把任意长度的 DFT 化为一次 2 的幂卷积。
+ * X[k] = exp(-iθk)·Σ x[n]·exp(-iθn²)·exp(+iθ(k-n)²)，θ = π/n
+ * 卷积用长度 ≥ 2n-1 的 2 的幂 FFT 完成（复用上面的 radix-2）。
+ * chirp 的角度按 k² mod 2n 折算 —— exp(iπ(k+2n)²/n) = exp(iπk²/n)，周期性保证无损。
+ */
+function bluesteinFft(re: Float32Array, im: Float32Array): void {
+  const n = re.length
+  const m = 1 << Math.ceil(Math.log2(2 * n - 1))
+  const period = 2 * n
+  const cosW = new Float32Array(n)
+  const sinW = new Float32Array(n)
+  for (let k = 0; k < n; k++) {
+    const theta = (Math.PI * ((k * k) % period)) / n
+    cosW[k] = Math.cos(theta)
+    sinW[k] = Math.sin(theta)
+  }
+  const aRe = new Float32Array(m)
+  const aIm = new Float32Array(m)
+  const bRe = new Float32Array(m)
+  const bIm = new Float32Array(m)
+  for (let k = 0; k < n; k++) {
+    // a[k] = x[k]·exp(+iθk)
+    aRe[k] = re[k]! * cosW[k]! + im[k]! * sinW[k]!
+    aIm[k] = im[k]! * cosW[k]! - re[k]! * sinW[k]!
+    // 卷积核 b[j] = exp(+iθj)，j ∈ [-(N-1), N-1]，存放在数组索引 j+(N-1)：
+    // 正索引 j=k 放在 k+(N-1)，负索引 j=-k 放在 (N-1)-k
+    const pos = k + n - 1
+    bRe[pos] = cosW[k]!
+    bIm[pos] = sinW[k]!
+    if (k > 0) {
+      bRe[n - 1 - k] = cosW[k]!
+      bIm[n - 1 - k] = sinW[k]!
+    }
+  }
+  fftInPlace(aRe, aIm)
+  fftInPlace(bRe, bIm)
+  for (let i = 0; i < m; i++) {
+    const tRe = aRe[i]! * bRe[i]! - aIm[i]! * bIm[i]!
+    aIm[i] = aRe[i]! * bIm[i]! + aIm[i]! * bRe[i]!
+    aRe[i] = tRe
+  }
+  ifftInPlace(aRe, aIm)
+  for (let k = 0; k < n; k++) {
+    const cRe = aRe[k + n - 1]!
+    const cIm = aIm[k + n - 1]!
+    // X[k] = exp(-iθk)·c[k+n-1]
+    re[k] = cRe * cosW[k]! + cIm * sinW[k]!
+    im[k] = cIm * cosW[k]! - cRe * sinW[k]!
+  }
+}
+
+/** 任意长度的正变换入口：2 的幂走 radix-2，其余走 Bluestein。 */
+export function fftAnyInPlace(re: Float32Array, im: Float32Array): void {
+  const n = re.length
+  if (n <= 1) return
+  if ((n & (n - 1)) === 0) {
+    fftInPlace(re, im)
+    return
+  }
+  bluesteinFft(re, im)
+}
+
+/** 任意长度的逆变换：共轭 → 正变换 → 共轭 / n。 */
+export function ifftAnyInPlace(re: Float32Array, im: Float32Array): void {
+  const n = re.length
+  for (let i = 0; i < n; i++) im[i] = -im[i]!
+  fftAnyInPlace(re, im)
+  const inv = 1 / n
+  for (let i = 0; i < n; i++) {
+    re[i] = re[i]! * inv
+    im[i] = -im[i]! * inv
+  }
+}
+
 /** 逆 FFT：共轭 → FFT → 共轭 / n。 */
 export function ifftInPlace(re: Float32Array, im: Float32Array): void {
   const n = re.length
@@ -144,7 +225,7 @@ export function stft(
         re[i] = idx >= 0 && idx < length ? src[idx]! * win[i]! : 0
         im[i] = 0
       }
-      fftInPlace(re, im)
+      fftAnyInPlace(re, im)
       const base = frame * bins
       for (let b = 0; b < bins; b++) {
         out.re[ch]![base + b] = re[b]!
@@ -192,7 +273,7 @@ export function istftAdd(
         re[nFft - b] = re[b]!
         im[nFft - b] = -im[b]!
       }
-      ifftInPlace(re, im)
+      ifftAnyInPlace(re, im)
       const dst = target[ch]!
       for (let i = 0; i < nFft; i++) {
         const idx = origin + i

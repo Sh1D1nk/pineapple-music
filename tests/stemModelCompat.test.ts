@@ -31,9 +31,10 @@ describe('模型签名 → 频谱配置', () => {
     expect(stftProfileFor(4096)).toEqual({ nFft: 8192, hop: 2048, center: false })
   })
 
-  it('n_fft 不是 2 的幂的频点数直接判不可用', () => {
-    // 3072 → n_fft=6144，本应用的 radix-2 FFT 跑不了
-    expect(stftProfileFor(3072)).toBeNull()
+  it('n_fft 不是 2 的幂也能映射（Bluestein 任意长度 FFT）', () => {
+    // 3072 → n_fft=6144（= 2^11 × 3），由 Bluestein chirp-z 支撑，不再直接判不可用
+    expect(stftProfileFor(3072)).toEqual({ nFft: 6144, hop: 1024, center: false })
+    expect(stftProfileFor(3073)).toEqual({ nFft: 6144, hop: 1024, center: true })
   })
 })
 
@@ -85,5 +86,28 @@ describe('掩码读取方向', () => {
     expect(mask[1]!).toBe(0)
     expect(mask[2]!).toBe(0)
     expect(mask[3]!).toBe(0.5)
+  })
+})
+
+
+describe('n_fft=6144（非 2 幂，Bluestein 路径）', () => {
+  it('STFT → iSTFT 无损往返', () => {
+    const signal = tone(1.0, 440)
+    const opts = { nFft: 6144, hop: 1024, center: false }
+    const pad = opts.nFft / 2
+    const padded = new Float32Array(signal.length + pad * 2)
+    padded.set(signal, pad)
+    const frames = Math.ceil((padded.length + opts.nFft) / opts.hop)
+    const spec = stft([padded], 0, frames, opts)
+    expect(spec.bins).toBe(3072)
+    const target = [new Float32Array(padded.length)]
+    const norm = new Float32Array(padded.length)
+    istftAdd(target, norm, spec.re, spec.im, 0, frames, opts)
+    applyNorm(target, norm)
+    let maxError = 0
+    for (let i = pad; i < pad + signal.length; i++) {
+      maxError = Math.max(maxError, Math.abs(target[0]![i]! - signal[i - pad]!))
+    }
+    expect(maxError).toBeLessThan(1e-3)
   })
 })

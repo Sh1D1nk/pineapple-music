@@ -3,6 +3,7 @@ import {
   DEFAULT_STFT,
   applyNorm,
   detectPhrases,
+  fftAnyInPlace,
   fftInPlace,
   ifftInPlace,
   istftAdd,
@@ -33,6 +34,22 @@ describe('FFT', () => {
 
   it('rejects non power-of-two lengths', () => {
     expect(() => fftInPlace(new Float32Array(3), new Float32Array(3))).toThrow()
+  })
+
+  it('Bluestein 任意长度 FFT 与直接 DFT 一致（n=6144 的正弦峰值应落在对应 bin）', () => {
+    // 6144 点：n_fft=6144（VOC-FT 一族）的实测长度
+    const n = 6144
+    const bin = 97 // 任选一个非零 bin
+    const re = new Float32Array(n)
+    const im = new Float32Array(n)
+    for (let i = 0; i < n; i++) re[i] = Math.sin((2 * Math.PI * bin * i) / n)
+    fftAnyInPlace(re, im)
+    // 正弦的频谱应集中在 ±bin（虚部/实部幅度 ≈ n/2）
+    expect(Math.hypot(re[bin]!, im[bin]!)).toBeGreaterThan(n * 0.45)
+    expect(Math.hypot(re[n - bin]!, im[n - bin]!)).toBeGreaterThan(n * 0.45)
+    // 其它位置应接近 0（泄漏之外）
+    const stray = Math.hypot(re[bin + 7]!, im[bin + 7]!)
+    expect(stray).toBeLessThan(n * 0.01)
   })
 })
 

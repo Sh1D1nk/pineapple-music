@@ -10,10 +10,11 @@ import { stftProfileFor, type StftOptions } from '../../shared/stem/stft'
  *   输出  [1, C', bins, T] float32
  * 其中 bins 决定本应用要用哪种频谱：
  *   2049 → n_fft=4096 居中（合成测试模型 / librosa 风格）
- *   2048 → n_fft=4096 不居中（UVR MDX-Net 的标准设置）
+ *   2048 → n_fft=4096 不居中（UVR MDX-Net 的标准设置，如 9662 一族）
  *   4097 / 4096 → n_fft=8192
- * 其它 bins（例如 MDX 的 3072 → n_fft=6144）本应用的 radix-2 FFT 跑不了，
- * 会明确写出原因，而不是「形状对不上还硬喂」。
+ *   3073 / 3072 → n_fft=6144（MDX-Net 的 dim_f=3072 一族，如 VOC-FT；
+ *                6144 不是 2 的幂，由 Bluestein 任意长度 FFT 支撑）
+ * 真正不支持的情况（例如随机奇数 bins）会明确写出原因，而不是「形状对不上还硬喂」。
  */
 
 export interface StemModelInfo {
@@ -142,7 +143,8 @@ export async function inspectModel(file: string): Promise<StemModelInfo | null> 
   const bins = Number(input.dimensions[2])
   const frames = Number(input.dimensions[3])
   if (!Number.isFinite(channels) || (channels !== 2 && channels !== 4)) return null
-  // bins 决定用哪种频谱：2049 居中 / 2048 不居中（MDX-Net）/ 4096、4097 走 n_fft=8192
+  // bins 决定用哪种频谱：2049 居中 / 2048 不居中（MDX-Net，如 9662）/ 3072 不居中（VOC-FT）/
+  // 4096、4097 走 n_fft=8192；3072 一族由 Bluestein 任意长度 FFT 支撑（n_fft=6144）
   const profile = stftProfileFor(bins)
   if (!profile) return null
   return {
@@ -160,7 +162,7 @@ export async function inspectModel(file: string): Promise<StemModelInfo | null> 
 
 /** 拆轨模型要求的签名，用于把「为什么不能用」讲清楚。 */
 export const EXPECTED_SIGNATURE =
-  '输入 [1, C, bins, T]（C = 2 或 4；bins = 2049 居中 / 2048 不居中 / 4096、4097），输出同形状的频谱 mask'
+  '输入 [1, C, bins, T]（C = 2 或 4；bins = 2048/2049/3072/3073/4096/4097，对应 4096/6144/8192 的 STFT），输出同形状的频谱 mask'
 
 export interface ModelProbe {
   ok: boolean
@@ -257,14 +259,17 @@ export async function probeModel(file: string): Promise<ModelProbe> {
       reason: `通道数 C=${Number.isFinite(channels) ? channels : '?'} 不受支持（只接受 2 或 4，实际 ${inputShape}）`
     }
   }
-  if (bins !== 2049) {
+  // 判定交给配置层：2048/2049/3072/3073/4096/4097 都能映射到可跑的 STFT，
+  // 写死单一数值会把其它真模型（9662 的 2048、VOC-FT 的 3072）误杀。
+  const profile = stftProfileFor(bins)
+  if (!profile) {
     return {
       ok: false,
       name,
       sizeMb,
       inputShape,
       outputShape,
-      reason: `频点数 ${Number.isFinite(bins) ? bins : '?'} ≠ 2049（本应用 STFT 为 n_fft=4096 / hop=1024，实际 ${inputShape}）`
+      reason: `频点数 ${Number.isFinite(bins) ? bins : '?'} 没有对应的 STFT 配置（本应用支持 2048/2049/3072/3073/4096/4097，实际 ${inputShape}）`
     }
   }
   return { ok: true, name, sizeMb, inputShape, outputShape, reason: null }
