@@ -44,8 +44,8 @@ const MATERIAL = {
   refraction: 84,
   edgeReach: 0.16,
   edgeWidth: 0.22,
-  // 底栏色散保持很弱（原版 0.12），气泡才是 0.35
-  dispersion: 0.35,
+  // 底栏几乎不色散（原版 0.12）；大色散只在气泡里
+  dispersion: 0.12,
   body: 0.72,
   absorption: 0.58,
   rim: 0.3,
@@ -73,6 +73,7 @@ export function BottomBar(): JSX.Element {
   const pushToast = useStore((s) => s.pushToast)
 
   const barRef = useRef<HTMLDivElement>(null)
+  const pillRef = useRef<HTMLSpanElement>(null)
   const randomRef = useRef<HTMLButtonElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef(new Map<string, HTMLButtonElement>())
@@ -99,7 +100,18 @@ export function BottomBar(): JSX.Element {
   const activeIndex = Math.max(0, keys.indexOf(activeKey))
   const lastIndex = keys.length - 1
 
+  /** 原版 popChild：按下选中时气泡先弹到 1.16 再回落（90ms 过冲 + 240ms 回弹） */
+  const popPill = (): void => {
+    const el = pillRef.current
+    if (!el) return
+    el.animate(
+      [{ scale: '1' }, { scale: '1.16', offset: 0.27 }, { scale: '1' }],
+      { duration: 330, easing: 'cubic-bezier(0.34, 1.55, 0.64, 1)' }
+    )
+  }
+
   const activate = (key: string): void => {
+    popPill()
     if (key === 'settings') {
       setView({ kind: 'settings' })
       return
@@ -376,6 +388,7 @@ export function BottomBar(): JSX.Element {
       >
         {/* 气泡在 track 之外：track 是滚动容器，会把越界的气泡裁掉 */}
         <span
+          ref={pillRef}
           className={styles.pill}
           style={{
             width: Math.max(0, raw.width - PILL_INSET * 2),
@@ -391,6 +404,12 @@ export function BottomBar(): JSX.Element {
               const distance = Math.abs(progress - index)
               const proximity = Math.max(0, Math.min(1, 1 - distance))
               const near = distance < 0.45
+              // 原版：lerp(baseColor.copy(alpha=.65), primaryColor, proximity)
+              // base = 白 62%，primary = 主题主色 #fa243c
+              const r = Math.round(255 + (250 - 255) * proximity)
+              const g = Math.round(255 + (36 - 255) * proximity)
+              const b = Math.round(255 + (60 - 255) * proximity)
+              const alpha = 0.62 + 0.38 * proximity
               return (
                 <button
                   key={entry.key}
@@ -404,7 +423,7 @@ export function BottomBar(): JSX.Element {
                     else tabRefs.current.delete(entry.key)
                   }}
                   className={styles.tab}
-                  style={{ color: `rgba(255, 255, 255, ${(0.6 + proximity * 0.4).toFixed(3)})` }}
+                  style={{ color: `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})` }}
                   onClick={() => activate(entry.key)}
                   title={entry.label}
                 >
