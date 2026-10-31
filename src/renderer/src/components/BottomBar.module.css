@@ -28,8 +28,8 @@
   /* 气泡按 1.14 拉伸、且在左右边缘会越界，容器不能裁剪 */
   overflow: visible;
   max-width: min(760px, calc(100vw - 140px));
-  /* 62 高 → 31 圆角，两端半圆（源码 CircleShape） */
-  border-radius: 31px;
+  /* 70 高 → 35 圆角，两端半圆 */
+  border-radius: 35px;
   padding: 0 6px;
   box-sizing: border-box;
   touch-action: none;
@@ -56,7 +56,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  height: 62px;
+  height: 70px;
 }
 
 /* ------------------------------------------------------------------ 移动气泡 */
@@ -66,10 +66,14 @@
 .pill {
   position: absolute;
   left: 0;
-  top: 50%;
+  /* bar 70 - pill 56 = 14，上下各 7：用固定 top 而不是 translateY(-50%)，
+     否则 scale 先于 transform 应用，放大后会整体上移 */
+  top: 7px;
   z-index: 0;
-  height: 48px;
-  border-radius: 24px;
+  height: 56px;
+  /* 胶囊圆角 + clip-path 双保险：任何缩放下四角都干净，不会露出直角 */
+  border-radius: 28px;
+  clip-path: inset(0 round 28px);
   /* 原版气泡只有一层均匀 tint + 细描边，没有画上去的镜面高光：
      折射、色散、模糊全部由 filter 提供，表面保持干净。 */
   background: rgba(255, 255, 255, 0.1);
@@ -101,10 +105,10 @@
   justify-content: center;
   gap: 2px;
   flex: 0 0 auto;
-  width: 86px;
-  height: 62px;
+  width: 94px;
+  height: 70px;
   padding: 0 6px;
-  border-radius: 31px;
+  border-radius: 35px;
   /* 颜色由 JS 按 proximity 逐帧计算 */
   transition: none;
 }
@@ -165,9 +169,9 @@
   align-items: center;
   justify-content: center;
   gap: 2px;
-  width: 68px;
-  height: 62px;
-  border-radius: 31px;
+  width: 72px;
+  height: 70px;
+  border-radius: 35px;
   color: rgba(255, 255, 255, 0.72);
   transition: color 120ms ease;
 }

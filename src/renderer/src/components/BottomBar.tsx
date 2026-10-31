@@ -94,6 +94,7 @@ export function BottomBar(): JSX.Element {
   const [stretch, setStretch] = useState(0)
   const [dragging, setDragging] = useState(false)
   const [scrollLeft, setScrollLeft] = useState(0)
+  const [trackOffset, setTrackOffset] = useState(0)
   const [webgl, setWebgl] = useState(false)
 
   const keys: string[] = NAV.map((entry) => entry.key as string)
@@ -131,6 +132,10 @@ export function BottomBar(): JSX.Element {
     })
     ro.observe(bar)
     const onScroll = (): void => setScrollLeft(track?.scrollLeft ?? 0)
+    // pill 挂在 .bar 上，而 tab.offsetLeft 是相对 .track 的；不补这段偏移就会整块左移
+    const barRect = bar.getBoundingClientRect()
+    const trackRect = track?.getBoundingClientRect()
+    if (trackRect) setTrackOffset(trackRect.left - barRect.left)
     track?.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       ro.disconnect()
@@ -182,17 +187,23 @@ export function BottomBar(): JSX.Element {
     setStretch(Math.min(0.14, Math.abs(instantVelocity) * 0.08))
   }
 
-  const dragEnd = (): void => {
+  const dragEnd = (clientX: number): void => {
     const state = dragRef.current
     dragRef.current = null
     if (!state) return
     setDragging(false)
     setPressed(false)
-    const target = Math.max(0, Math.min(lastIndex, Math.round(progressRef.current)))
-    progressRef.current = target
-    setProgress(target)
+    // 没拖动 = 点击：按落点切页，气泡随后滑过去；拖动了 = 吸附最近格
+    const target = state.moved
+      ? Math.max(0, Math.min(lastIndex, Math.round(progressRef.current)))
+      : indexAt(clientX)
+    if (target !== activeIndex) {
+      activate(keys[target]!)
+    } else {
+      progressRef.current = activeIndex
+      setProgress(activeIndex)
+    }
     setStretch(0)
-    if (target !== activeIndex) activate(keys[target]!)
   }
 
   const dragCancel = (): void => {
@@ -207,17 +218,15 @@ export function BottomBar(): JSX.Element {
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0) return
     event.preventDefault()
-    const index = indexAt(event.clientX)
+    // 按住只放大，气泡留在原位；只有真的拖起来才移动（避免按下瞬间跳格）
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
-      startProgress: index,
+      startProgress: progressRef.current,
       moved: false,
       lastX: event.clientX,
       lastT: performance.now()
     }
-    progressRef.current = index
-    setProgress(index)
     setStretch(0)
     setPressed(true)
     setDragging(true)
@@ -230,7 +239,7 @@ export function BottomBar(): JSX.Element {
     const up = (e: PointerEvent): void => {
       if (e.pointerId !== pointerId) return
       cleanup()
-      dragEnd()
+      dragEnd(e.clientX)
     }
     const cancel = (e: PointerEvent): void => {
       if (e.pointerId !== pointerId) return
@@ -386,8 +395,8 @@ export function BottomBar(): JSX.Element {
           data-dragging={dragging ? 'true' : 'false'}
           style={{
             width: Math.max(0, raw.width - PILL_INSET * 2),
-            transform: `translateX(${raw.left - scrollLeft + PILL_INSET}px) translateY(-50%) scaleX(${1 + stretch}) scaleY(${1 - stretch * 0.25})`,
-            scale: pressed ? '1.16' : '1'
+            transform: `translateX(${raw.left + trackOffset - scrollLeft + PILL_INSET}px) scaleX(${1 + stretch}) scaleY(${1 - stretch * 0.25})`,
+            scale: pressed ? '1.28' : '1'
           }}
           aria-hidden="true"
         />
