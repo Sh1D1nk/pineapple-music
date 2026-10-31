@@ -48,13 +48,13 @@ const MATERIAL = {
   dispersion: 0.12,
   body: 0.72,
   absorption: 0.58,
-  rim: 0.3,
-  reflection: 0.34,
-  highlight: 0.4,
+  rim: 0.16,
+  reflection: 0.2,
+  highlight: 0.18,
   lightAngle: 136,
-  echo: 0.3,
-  hairline: 0.9,
-  hairWidth: 0.55
+  echo: 0.1,
+  hairline: 0.3,
+  hairWidth: 0.5
 }
 
 const EDGE_DAMPING = 0.25
@@ -89,6 +89,7 @@ export function BottomBar(): JSX.Element {
   const dragCleanupRef = useRef<(() => void) | null>(null)
 
   const [progress, setProgress] = useState(0)
+  const [pressed, setPressed] = useState(false)
   const progressRef = useRef(0)
   const [stretch, setStretch] = useState(0)
   const [dragging, setDragging] = useState(false)
@@ -100,18 +101,7 @@ export function BottomBar(): JSX.Element {
   const activeIndex = Math.max(0, keys.indexOf(activeKey))
   const lastIndex = keys.length - 1
 
-  /** 原版 popChild：按下选中时气泡先弹到 1.16 再回落（90ms 过冲 + 240ms 回弹） */
-  const popPill = (): void => {
-    const el = pillRef.current
-    if (!el) return
-    el.animate(
-      [{ scale: '1' }, { scale: '1.16', offset: 0.27 }, { scale: '1' }],
-      { duration: 330, easing: 'cubic-bezier(0.34, 1.55, 0.64, 1)' }
-    )
-  }
-
   const activate = (key: string): void => {
-    popPill()
     if (key === 'settings') {
       setView({ kind: 'settings' })
       return
@@ -197,6 +187,7 @@ export function BottomBar(): JSX.Element {
     dragRef.current = null
     if (!state) return
     setDragging(false)
+    setPressed(false)
     const target = Math.max(0, Math.min(lastIndex, Math.round(progressRef.current)))
     progressRef.current = target
     setProgress(target)
@@ -207,6 +198,7 @@ export function BottomBar(): JSX.Element {
   const dragCancel = (): void => {
     dragRef.current = null
     setDragging(false)
+    setPressed(false)
     setStretch(0)
     progressRef.current = activeIndex
     setProgress(activeIndex)
@@ -227,6 +219,7 @@ export function BottomBar(): JSX.Element {
     progressRef.current = index
     setProgress(index)
     setStretch(0)
+    setPressed(true)
     setDragging(true)
 
     // window 级监听：pointer capture 会在鼠标移出元素时被 Chromium 取消
@@ -390,10 +383,11 @@ export function BottomBar(): JSX.Element {
         <span
           ref={pillRef}
           className={styles.pill}
+          data-dragging={dragging ? 'true' : 'false'}
           style={{
             width: Math.max(0, raw.width - PILL_INSET * 2),
             transform: `translateX(${raw.left - scrollLeft + PILL_INSET}px) translateY(-50%) scaleX(${1 + stretch}) scaleY(${1 - stretch * 0.25})`,
-            transition: dragging ? 'none' : undefined
+            scale: pressed ? '1.16' : '1'
           }}
           aria-hidden="true"
         />
