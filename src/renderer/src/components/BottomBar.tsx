@@ -238,6 +238,9 @@ export function BottomBar(): JSX.Element {
     const instances: { destroy: () => void; refresh?: () => void }[] = []
     const options = {
       backdrop: 'auto' as const,
+      // 精确胶囊 SDF（参考项目的 Dock 就是 shape: 'pill'）。虽然 CSS 圆角取半高时
+      // 几何等价，但 pill 的距离场在两端给出连续曲率，法线/高光不会在圆角接缝处跳变。
+      shape: 'pill' as const,
       // 白字压在玻璃上：tint 保证可读，frost 只留一点点——
       // 模糊给多了就把折射糊成磨砂，底边那圈弯曲的内容才是液态玻璃的签名
       tint: 0.45,
