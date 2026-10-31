@@ -380,18 +380,20 @@ html[data-fx='cheap'] .glass {
   will-change: transform, opacity;
 }
 
-.viewSwapUp {
-  animation: viewRollUp 0.44s cubic-bezier(0.32, 0.72, 0, 1) both;
+.viewSwapLeft {
+  animation: viewRollLeft 0.44s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
-.viewSwapDown {
-  animation: viewRollDown 0.44s cubic-bezier(0.32, 0.72, 0, 1) both;
+.viewSwapRight {
+  animation: viewRollRight 0.44s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
-@keyframes viewRollUp {
+/* 与底栏同向：向左走 → 新页从右侧推入；向右走 → 新页从左侧推入。
+   只动 X 轴，不再上下滑，和 KernelSU 的 HorizontalPager 观感一致。 */
+@keyframes viewRollLeft {
   from {
     opacity: 0;
-    transform: translate3d(0, 34px, 0);
+    transform: translate3d(38px, 0, 0);
   }
   to {
     opacity: 1;
@@ -399,10 +401,10 @@ html[data-fx='cheap'] .glass {
   }
 }
 
-@keyframes viewRollDown {
+@keyframes viewRollRight {
   from {
     opacity: 0;
-    transform: translate3d(0, -34px, 0);
+    transform: translate3d(-38px, 0, 0);
   }
   to {
     opacity: 1;

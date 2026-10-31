@@ -81,7 +81,7 @@ interface StoreState {
   view: View
   /** 供鼠标侧键 / Esc 用的返回栈，只在主导航与详情页之间记录 */
   viewHistory: View[]
-  navDirection: 'up' | 'down' | 'none'
+  navDirection: 'left' | 'right' | 'none'
   search: string
   queueOpen: boolean
   lyricsOpen: boolean
@@ -401,10 +401,11 @@ export const useStore = create<StoreState>((set, get) => {
         JSON.stringify(current) === JSON.stringify(view)
       if (same) return
       // 主导航（最近添加/艺人/专辑/歌曲/收藏）的高低决定内容进出方向，做成「向上/向下滚过」的观感
+      // 设置与详情页也要有横向位置，否则从它们切出去时方向会是 none（没有过渡）
       const order = (v: View): number =>
-        v.kind === 'recent'
+        v.kind === 'recent' || v.kind === 'album'
           ? 0
-          : v.kind === 'artists'
+          : v.kind === 'artists' || v.kind === 'artist'
             ? 1
             : v.kind === 'albums'
               ? 2
@@ -412,11 +413,14 @@ export const useStore = create<StoreState>((set, get) => {
                 ? 3
                 : v.kind === 'favorites'
                   ? 4
-                  : -1
+                  : v.kind === 'settings'
+                    ? 5
+                    : -1
       const from = order(current)
       const to = order(view)
+      // 页面切换与底栏同向：往右走，新页从左进；往左走，新页从右进（KernelSU 的 HorizontalPager 同向）
       const navDirection =
-        from >= 0 && to >= 0 && from !== to ? (to > from ? 'down' : 'up') : 'none'
+        from >= 0 && to >= 0 && from !== to ? (to > from ? 'left' : 'right') : 'none'
       const history = options?.silent ? get().viewHistory : [...get().viewHistory, current].slice(-24)
       set({ view, viewHistory: history, navDirection })
       persist(get())
@@ -431,7 +435,7 @@ export const useStore = create<StoreState>((set, get) => {
         return
       }
       const previous = history[history.length - 1]!
-      set({ view: previous, viewHistory: history.slice(0, -1), navDirection: 'up' })
+      set({ view: previous, viewHistory: history.slice(0, -1), navDirection: 'right' })
       persist(get())
     },
     setSearch(value) {

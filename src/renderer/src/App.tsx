@@ -172,8 +172,8 @@ function useDropTarget(): boolean {
 }
 
 /** 主导航切换时的方向类：向上切（歌曲→最近添加）内容向上滚，反之向下。 */
-function navClass(direction: 'up' | 'down' | 'none'): string {
-  return direction === 'up' ? 'viewSwapUp' : direction === 'down' ? 'viewSwapDown' : ''
+function navClass(direction: 'left' | 'right' | 'none'): string {
+  return direction === 'left' ? 'viewSwapLeft' : direction === 'right' ? 'viewSwapRight' : ''
 }
 
 function Pages(): JSX.Element {
@@ -322,7 +322,7 @@ export function App(): JSX.Element {
         <div className="contentLayer">
           <div className="scrollEdgeTop" />
           <div id="contentScroll" className={`contentScroll ${queueOpen ? 'withQueue' : ''}`}>
-            <div key={viewKey} className={`viewSwap ${navClass(navDirection)}`}>
+            <div key={viewKey} className={`viewSwap ${navClass(navDirection)}`} data-nav-dir={navDirection}>
               <Pages />
             </div>
           </div>
