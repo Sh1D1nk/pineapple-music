@@ -263,7 +263,7 @@ app.whenReady().then(async () => {
   ipcMain.on('overlay/tray-command', (_e, command: string | { type: 'volume'; value: number }) =>
     trayController?.handleCommand(command)
   )
-  ipcMain.on('media/state', (_e, state: { playing: boolean; hasTrack: boolean; title: string; artist: string; volume: number }) => {
+  ipcMain.on('media/state', (_e, state: { playing: boolean; hasTrack: boolean; title: string; artist: string; volume: number; coverId?: string | null }) => {
     trayController?.updateState(state)
   })
 

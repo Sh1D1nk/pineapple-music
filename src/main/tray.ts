@@ -1,5 +1,7 @@
 import { BrowserWindow, Tray, nativeImage, nativeTheme, screen, type NativeImage } from 'electron'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { coverFile } from './library/covers'
 
 /**
  * 系统托盘 + 自绘玻璃菜单。
@@ -17,6 +19,8 @@ export interface TrayPlaybackState {
   title: string
   artist: string
   volume: number
+  /** 当前曲目的封面 id（covers.ts 的内容哈希），托盘图标直接用它 */
+  coverId?: string | null
 }
 
 export interface TrayHostOptions {
@@ -28,8 +32,10 @@ export interface TrayHostOptions {
   onVolume?: (value: number) => void
 }
 
-const MENU_WIDTH = 300
-const MENU_HEIGHT = 348
+const MENU_WIDTH = 258
+const MENU_HEIGHT = 296
+/** Windows 托盘按 16px 显示，直接给 16 比给 32 再缩放更锐利 */
+const TRAY_ICON = 16
 const ICON_SIZE = 32
 
 /** 32×32：橙渐变圆 + 白色音符（4× 超采样，边缘用距离场抗锯齿）。 */
@@ -120,7 +126,13 @@ function createTrayIcon(): NativeImage {
       out[o + 3] = Math.round(a / n)
     }
   }
-  return nativeImage.createFromBitmap(out, { width: ICON_SIZE, height: ICON_SIZE })
+  const image = nativeImage.createFromBitmap(out, { width: ICON_SIZE, height: ICON_SIZE })
+  if (image.isEmpty()) return image
+  try {
+    return image.resize({ width: TRAY_ICON, height: TRAY_ICON, quality: 'best' })
+  } catch {
+    return image
+  }
 }
 
 export class TrayController {
@@ -131,16 +143,25 @@ export class TrayController {
     hasTrack: false,
     title: '',
     artist: '',
-    volume: 1
+    volume: 1,
+    coverId: null
   }
+  /** 没有封面时的兜底图标（自绘，和封面的圆形裁切观感接近） */
+  private fallbackIcon: NativeImage | null = null
   private ready = false
 
   constructor(private readonly opts: TrayHostOptions) {}
 
   start(): void {
     if (this.tray) return
-    const icon = createTrayIcon()
-    this.tray = new Tray(icon)
+    try {
+      this.fallbackIcon = createTrayIcon()
+      this.tray = new Tray(this.fallbackIcon)
+    } catch (err) {
+      // 托盘创建失败不能影响主窗口：记一笔就放弃托盘
+      console.error('[tray] create failed:', err)
+      return
+    }
     this.tray.setToolTip('Pineapple Music')
     // 左键和右键都打开同一份自绘菜单
     this.tray.on('click', () => this.toggleMenu())
@@ -157,9 +178,28 @@ export class TrayController {
         : 'Pineapple Music'
       this.tray.setToolTip(label)
     }
+    if (patch.coverId !== undefined) this.applyIcon()
     if (this.menu && !this.menu.isDestroyed() && this.ready) {
       this.menu.webContents.send('overlay/tray-state', this.state)
     }
+  }
+
+  /** 托盘图标 = 当前专辑封面（缩到 16px，圆角矩形裁切观感），没有封面时用兜底图标 */
+  private applyIcon(): void {
+    const tray = this.tray
+    if (!tray) return
+    const id = this.state.coverId
+    if (id) {
+      const file = coverFile(id, 80)
+      if (existsSync(file)) {
+        const image = nativeImage.createFromPath(file).resize({ width: TRAY_ICON, height: TRAY_ICON, quality: 'best' })
+        if (!image.isEmpty()) {
+          tray.setImage(image)
+          return
+        }
+      }
+    }
+    if (this.fallbackIcon) tray.setImage(this.fallbackIcon)
   }
 
   /** 主窗口显示/隐藏时同步（隐藏到托盘后，菜单里的「打开主窗口」才有意义） */

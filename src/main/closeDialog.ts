@@ -22,8 +22,8 @@ export interface OverlayRenderer {
   file?: string
 }
 
-const DIALOG_WIDTH = 432
-const DIALOG_HEIGHT = 244
+const DIALOG_WIDTH = 380
+const DIALOG_HEIGHT = 204
 
 let pending: { resolve: (value: CloseDecision) => void } | null = null
 

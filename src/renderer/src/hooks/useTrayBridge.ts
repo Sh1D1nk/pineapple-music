@@ -13,10 +13,11 @@ export function useTrayBridge(): void {
   const hasTrack = Boolean(songId)
   const title = useStore((s) => (songId ? s.songs[songId]?.title ?? '' : ''))
   const artist = useStore((s) => (songId ? (s.songs[songId]?.artists ?? []).join(' / ') : ''))
+  const coverId = useStore((s) => (songId ? s.songs[songId]?.coverId ?? null : null))
 
   useEffect(() => {
-    window.lm.send('media/state', { playing, hasTrack, title, artist, volume })
-  }, [playing, hasTrack, title, artist, volume])
+    window.lm.send('media/state', { playing, hasTrack, title, artist, volume, coverId })
+  }, [playing, hasTrack, title, artist, volume, coverId])
 
   useEffect(() => {
     return window.lm.on('media/volume', ((value: number) => {
