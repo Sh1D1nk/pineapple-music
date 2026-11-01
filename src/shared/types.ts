@@ -59,6 +59,12 @@ export interface AnalysisResult {
   audioEnd: number;
   analyzedAt: number;
   engine: string;
+  /**
+   * 尾窗（最后 ~72s）里的人声乐句，绝对秒。
+   * 由轻量 VAD（中频占比）算出，不依赖分轨 —— AutoMix 的快速通道。
+   * 可选：v1.5.1 之前分析的歌曲没有这个字段。
+   */
+  vocalPhrases?: { start: number; end: number }[] | null;
 }
 
 export interface StemInfo {

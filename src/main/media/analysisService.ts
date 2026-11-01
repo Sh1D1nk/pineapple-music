@@ -149,7 +149,8 @@ export class AnalysisService extends EventEmitter {
       audioStart: dynamics.audioStart,
       audioEnd,
       analyzedAt: Date.now(),
-      engine: result.engine
+      engine: result.engine,
+      vocalPhrases: result.tailVocalPhrases ?? null
     }
   }
 

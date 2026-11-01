@@ -1,6 +1,7 @@
 import { parentPort } from 'node:worker_threads'
 import { estimateTempo, onsetEnvelope, trackBeats, trackBeatsDP } from '@shared/dsp/tempo'
 import { estimateKey } from '@shared/dsp/key'
+import { detectVocalPhrases, type VocalPhrase } from '@shared/dsp/vocal'
 
 export interface AnalyzeRequest {
   id: number
@@ -29,6 +30,8 @@ export interface AnalyzeOk {
   key: number
   keyConfidence: number
   engine: string
+  /** 尾窗人声乐句（绝对秒），轻量 VAD 结果，AutoMix 不等分轨就能用它规划 */
+  tailVocalPhrases: VocalPhrase[]
 }
 
 export interface AnalyzeFail {
@@ -125,6 +128,9 @@ export function analyzeWindows(req: Omit<AnalyzeRequest, 'id'>): AnalyzeOk {
   const keyTail = estimateKey(req.tail, req.sampleRate)
   const keyResult = keyHead.confidence >= keyTail.confidence ? keyHead : keyTail
 
+  // 人声乐句：只跑尾窗（过渡决策只关心歌尾），纯 DSP、毫秒级
+  const tailVocalPhrases = detectVocalPhrases(req.tail, req.sampleRate, req.tailStart)
+
   return {
     id: 0,
     ok: true,
@@ -140,7 +146,8 @@ export function analyzeWindows(req: Omit<AnalyzeRequest, 'id'>): AnalyzeOk {
     headDownbeats,
     key: keyResult.key,
     keyConfidence: keyResult.confidence,
-    engine: primaryTrack.engine
+    engine: primaryTrack.engine,
+    tailVocalPhrases
   }
 }
 

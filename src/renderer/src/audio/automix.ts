@@ -184,8 +184,20 @@ export async function prepareAutoMix(current: SongMeta, next: SongMeta): Promise
 
   // 有分轨就用分轨里的人声乐句（真实人声），没有才退回歌词时间轴
   const [lyricPhrasesA, lyricPhrasesB] = await Promise.all([phrasesFor(current), phrasesFor(next)])
-  const currentPhrases = current.stem?.state === 'ready' && current.stem.phrases ? current.stem.phrases : lyricPhrasesA
-  const nextPhrases = next.stem?.state === 'ready' && next.stem.phrases ? next.stem.phrases : lyricPhrasesB
+  // 人声乐句的来源优先级：分轨（高质量但慢）→ 轻量 VAD 的尾窗结果（秒级）→ 歌词
+  // 这样 AutoMix 不必等几分钟的分轨就能规划；分轨就绪后自然接管。
+  const currentPhrases =
+    current.stem?.state === 'ready' && current.stem.phrases
+      ? current.stem.phrases
+      : current.analysis?.vocalPhrases?.length
+        ? current.analysis.vocalPhrases
+        : lyricPhrasesA
+  const nextPhrases =
+    next.stem?.state === 'ready' && next.stem.phrases
+      ? next.stem.phrases
+      : next.analysis?.vocalPhrases?.length
+        ? next.analysis.vocalPhrases
+        : lyricPhrasesB
   if (job.cancelled) return
 
   const plan = buildPlan(current, next, {
