@@ -271,6 +271,18 @@ export class TrayController {
     }
   }
 
+  /** 渲染进程量出来的内容高度 → 窗口高度，避免底部留一块空白 */
+  setMenuHeight(height: number): void {
+    const menu = this.menu
+    if (!menu || menu.isDestroyed()) return
+    const next = Math.max(180, Math.min(560, Math.round(height)))
+    const size = menu.getContentSize()
+    const currentWidth = size[0] ?? 0
+    const currentHeight = size[1] ?? 0
+    if (Math.abs(currentHeight - next) <= 1 && currentWidth === MENU_WIDTH) return
+    menu.setContentSize(MENU_WIDTH, next)
+  }
+
   hideMenu(): void {
     this.menu?.hide()
   }

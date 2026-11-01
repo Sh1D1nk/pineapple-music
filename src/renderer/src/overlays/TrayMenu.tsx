@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { loadHyalite } from '../glass/hyalite'
 import { coverUrl } from '../bridge'
 import { Icon } from '../components/Icon'
@@ -46,6 +46,20 @@ export function TrayMenu({ dark }: { dark: boolean }): JSX.Element {
   const cardRef = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<TrayState>(EMPTY)
   const [volume, setVolume] = useState(1)
+
+  // 把卡片的真实高度报给主进程，让它把窗口收到刚好包住内容（不留底部空格）
+  useLayoutEffect(() => {
+    const el = cardRef.current
+    if (!el) return undefined
+    const report = (): void => {
+      const height = Math.ceil(el.getBoundingClientRect().height + 16)
+      window.lm.send('overlay/tray-height', height)
+    }
+    const observer = new ResizeObserver(report)
+    observer.observe(el)
+    report()
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     document.documentElement.dataset.overlay = '1'
@@ -137,8 +151,6 @@ export function TrayMenu({ dark }: { dark: boolean }): JSX.Element {
           <span className={styles.rowLabel}>下一首</span>
         </button>
 
-        <div className={styles.divider} />
-
         <div className={styles.volumeRow}>
           <span className={styles.volumeIcon}>
             <VolumeGlyph />
@@ -162,7 +174,7 @@ export function TrayMenu({ dark }: { dark: boolean }): JSX.Element {
 
         <button type="button" className={styles.row} onClick={() => command('open-main')}>
           <span className={styles.rowIcon}>
-            <Icon name="expand" size={13} />
+            <Icon name="music" size={13} />
           </span>
           <span className={styles.rowLabel}>打开 Pineapple Music</span>
         </button>

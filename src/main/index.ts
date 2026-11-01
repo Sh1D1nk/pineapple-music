@@ -263,6 +263,9 @@ app.whenReady().then(async () => {
   ipcMain.on('overlay/tray-command', (_e, command: string | { type: 'volume'; value: number }) =>
     trayController?.handleCommand(command)
   )
+  ipcMain.on('overlay/tray-height', (_e, height: number) => {
+    if (Number.isFinite(height)) trayController?.setMenuHeight(height)
+  })
   ipcMain.on('media/state', (_e, state: { playing: boolean; hasTrack: boolean; title: string; artist: string; volume: number; coverId?: string | null }) => {
     trayController?.updateState(state)
   })

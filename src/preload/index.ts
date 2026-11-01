@@ -62,7 +62,7 @@ const INVOKE_CHANNELS = [
 type InvokeChannel = (typeof INVOKE_CHANNELS)[number]
 
 /** 只出不回的通道（关闭确认、托盘菜单命令、播放状态上报） */
-const SEND_CHANNELS = ['overlay/close-decision', 'overlay/tray-command', 'media/state'] as const
+const SEND_CHANNELS = ['overlay/close-decision', 'overlay/tray-command', 'overlay/tray-height', 'media/state'] as const
 
 const api = {
   invoke<T>(channel: InvokeChannel, ...args: unknown[]): Promise<T> {
