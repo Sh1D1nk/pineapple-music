@@ -170,6 +170,14 @@
   padding: 0 10px;
   font-size: 12px;
   color: var(--text-primary);
+  /* 原生下拉按钮/弹层跟随主题（color-scheme 在 tokens.css 里由 data-theme 驱动） */
+  color-scheme: inherit;
+}
+
+/* 弹层选项在 Windows Chromium 上不复用 select 的背景，单独给深色底 */
+.labSelect option {
+  background: var(--bg-content, #fff);
+  color: var(--text-primary);
 }
 
 /* Lab 里的独立按钮：.segment 是「分段控件里的一项」，单独用没有背景，看起来像纯文本 */

@@ -1,4 +1,5 @@
 :root {
+  /* 兜底：主题属性还没写入时跟随系统 */
   color-scheme: light dark;
 
   --font-ui: 'SF Pro Text', 'SF Pro Display', 'PingFang SC', 'Segoe UI Variable Text', 'Segoe UI',
@@ -33,7 +34,11 @@
   --queue-w: 380px;
 }
 
+/* 应用主题优先于系统主题：否则系统是浅色、应用切深色时，
+   <select> 的弹出列表仍按浅色画（白底），而文字是应用的白色 —— 白底白字。 */
 :root[data-theme='light'] {
+  color-scheme: light;
+
   --bg-content: #ffffff;
   --bg-elevated: #fbfbfd;
   --text-primary: #1d1d1f;
@@ -60,6 +65,8 @@
 }
 
 :root[data-theme='dark'] {
+  color-scheme: dark;
+
   --nav-thumb: rgba(255, 255, 255, 0.13);
   --nav-thumb-stroke: rgba(255, 255, 255, 0.08);
   --bg-content: #1f1f21;
