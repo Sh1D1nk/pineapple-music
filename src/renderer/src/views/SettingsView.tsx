@@ -401,6 +401,17 @@ export function SettingsView(): JSX.Element {
             onChange={(theme) => void update({ theme })}
           />
         </Row>
+        <Row label="关闭窗口时" hint="「后台播放」关窗口不停音乐，托盘图标留在系统里；「直接退出」不弹确认">
+          <Segmented
+            value={settings.closeBehavior}
+            options={[
+              { value: 'ask', label: '每次询问' },
+              { value: 'background', label: '后台播放' },
+              { value: 'quit', label: '直接退出' }
+            ]}
+            onChange={(closeBehavior) => void update({ closeBehavior })}
+          />
+        </Row>
         <Row
           label="液态玻璃"
           hint={`当前生效：${

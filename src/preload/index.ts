@@ -61,12 +61,19 @@ const INVOKE_CHANNELS = [
 
 type InvokeChannel = (typeof INVOKE_CHANNELS)[number]
 
+/** 只出不回的通道（关闭确认、托盘菜单命令、播放状态上报） */
+const SEND_CHANNELS = ['overlay/close-decision', 'overlay/tray-command', 'media/state'] as const
+
 const api = {
   invoke<T>(channel: InvokeChannel, ...args: unknown[]): Promise<T> {
     if (!INVOKE_CHANNELS.includes(channel)) {
       return Promise.reject(new Error(`blocked channel: ${channel}`))
     }
     return ipcRenderer.invoke(channel, ...args) as Promise<T>
+  },
+  send(channel: string, payload?: unknown): void {
+    if (!(SEND_CHANNELS as readonly string[]).includes(channel)) return
+    ipcRenderer.send(channel, payload)
   },
   on(channel: string, listener: (payload: any) => void): () => void {
     const handler = (_event: unknown, payload: any): void => listener(payload)

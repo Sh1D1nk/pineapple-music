@@ -1,0 +1,352 @@
+/* 悬浮窗（关闭确认 / 托盘菜单）—— 透明无边框窗口里的液态玻璃卡片。
+   玻璃本身由 hyalite 写入的 --hyalite / --hyalite-edge 提供，
+   这里的 background 只是很淡的着色，避免玻璃完全透成背景。 */
+
+:global(html),
+:global(body) {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  overflow: hidden;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+:global(#root) {
+  width: 100vw;
+  height: 100vh;
+}
+
+.shell {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+}
+
+.card {
+  position: relative;
+  box-sizing: border-box;
+  height: 100%;
+  border-radius: 22px;
+  padding: 18px 18px 16px;
+  color: var(--text-primary);
+  background: rgba(24, 24, 26, 0.52);
+  backdrop-filter: var(--hyalite, blur(26px) saturate(180%));
+  -webkit-backdrop-filter: var(--hyalite, blur(26px) saturate(180%));
+  box-shadow:
+    var(--hyalite-edge, none),
+    0 24px 64px rgba(0, 0, 0, 0.48),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+:global([data-theme='light']) .card {
+  background: rgba(250, 250, 252, 0.6);
+  color: #1d1d1f;
+  box-shadow:
+    var(--hyalite-edge, none),
+    0 24px 64px rgba(0, 0, 0, 0.24),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7);
+}
+
+/* ------------------------------------------------------------------ 关闭确认 */
+
+.title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.body {
+  margin-top: 8px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+:global([data-theme='light']) .body {
+  color: rgba(29, 29, 31, 0.62);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.primary,
+.secondary {
+  height: 36px;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: transform 120ms var(--ease), background 140ms var(--ease), box-shadow 140ms var(--ease);
+}
+
+.primary {
+  color: #fff;
+  background: var(--accent, #fa243c);
+  box-shadow: 0 6px 18px rgba(250, 36, 60, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.primary:hover {
+  background: var(--accent-hover, #ff3b52);
+}
+
+.secondary {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
+}
+
+.secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+:global([data-theme='light']) .secondary {
+  color: #1d1d1f;
+  background: rgba(0, 0, 0, 0.05);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+}
+
+.primary:active,
+.secondary:active {
+  transform: scale(0.985);
+}
+
+.remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  /* 拖动区域：卡片顶部可拖动，底部交互区不行 */
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+:global([data-theme='light']) .remember {
+  color: rgba(29, 29, 31, 0.58);
+}
+
+.checkbox {
+  width: 15px;
+  height: 15px;
+  border-radius: 4.5px;
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  color: #fff;
+  transition: background 140ms var(--ease);
+}
+
+.checkbox[data-on='true'] {
+  background: var(--accent, #fa243c);
+  box-shadow: none;
+}
+
+:global([data-theme='light']) .checkbox {
+  background: rgba(0, 0, 0, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
+}
+
+/* ------------------------------------------------------------------ 托盘菜单 */
+
+.menuHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
+  -webkit-app-region: drag;
+}
+
+:global([data-theme='light']) .menuHead {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.art {
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.08);
+  object-fit: cover;
+}
+
+.artFallback {
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(140deg, rgba(255, 183, 77, 0.5), rgba(255, 122, 24, 0.35));
+  font-size: 16px;
+}
+
+.meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.menuTitle {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menuSub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:global([data-theme='light']) .menuSub {
+  color: rgba(29, 29, 31, 0.56);
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 0 10px;
+}
+
+.transportBtn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+  transition: background 140ms var(--ease), transform 120ms var(--ease);
+}
+
+.transportBtn:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.transportBtn:active {
+  transform: scale(0.94);
+}
+
+.transportMain {
+  width: 46px;
+  height: 46px;
+  background: var(--accent, #fa243c);
+  box-shadow: 0 8px 22px rgba(250, 36, 60, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.transportMain:hover {
+  background: var(--accent-hover, #ff3b52);
+}
+
+:global([data-theme='light']) .transportBtn {
+  background: rgba(0, 0, 0, 0.05);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+}
+
+:global([data-theme='light']) .transportMain {
+  background: var(--accent, #fa243c);
+  box-shadow: 0 8px 22px rgba(250, 36, 60, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.volumeRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px 12px;
+  -webkit-app-region: no-drag;
+}
+
+.volumeIcon {
+  font-size: 12px;
+  color: var(--text-secondary);
+  width: 16px;
+  text-align: center;
+}
+
+.slider {
+  flex: 1;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  outline: none;
+}
+
+:global([data-theme='light']) .slider {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.menuFoot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.08);
+}
+
+:global([data-theme='light']) .menuFoot {
+  border-top-color: rgba(0, 0, 0, 0.07);
+}
+
+.footItem {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-primary);
+  transition: background 120ms var(--ease);
+}
+
+.footItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.footItem[data-danger='true'] {
+  color: #ff6b6b;
+}
+
+:global([data-theme='light']) .footItem {
+  color: #1d1d1f;
+}
+
+:global([data-theme='light']) .footItem:hover {
+  background: rgba(0, 0, 0, 0.05);
+}

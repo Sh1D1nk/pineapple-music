@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { useStore } from './state/store'
+import { useTrayBridge } from './hooks/useTrayBridge'
 import { GlassProvider } from './glass/GlassProvider'
 import { Sidebar } from './components/Sidebar'
 import { BottomBar } from './components/BottomBar'
@@ -177,6 +178,7 @@ function navClass(direction: 'left' | 'right' | 'none'): string {
 }
 
 function Pages(): JSX.Element {
+  useTrayBridge()
   const view = useStore((s) => s.view)
   const songCount = useStore((s) => s.songIds.length)
 

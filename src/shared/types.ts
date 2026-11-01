@@ -164,6 +164,8 @@ export interface SongInfoExtra {
 
 export interface AppSettings {
   theme: 'system' | 'light' | 'dark' | 'liquid';
+  /** 关闭主窗口时的行为：每次询问 / 后台继续播放 / 直接退出 */
+  closeBehavior: 'ask' | 'background' | 'quit';
   glass: 'full' | 'lite' | 'off';
   sidebarWidth: number;
   lyricsPriority: ('sidecar' | 'embedded' | 'text')[];
@@ -233,6 +235,7 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  closeBehavior: 'ask',
   theme: 'system',
   glass: 'full',
   sidebarWidth: 248,

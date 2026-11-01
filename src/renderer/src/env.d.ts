@@ -8,6 +8,7 @@ declare module '*?url' {
 interface Window {
   lm: {
     invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>
+    send: (channel: string, payload?: unknown) => void
     on: (channel: string, listener: (payload: never) => void) => () => void
   }
 }

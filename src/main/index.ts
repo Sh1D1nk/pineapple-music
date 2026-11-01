@@ -10,6 +10,8 @@ import { SettingsService } from './settings'
 import { registerIpc, wireEvents, applyOverlay } from './ipc'
 import { registerProtocols, registerSchemes } from './protocols'
 import { windowStateFile } from './paths'
+import { TrayController } from './tray'
+import { askCloseBehavior, resolveCloseDecision, type CloseDecision } from './closeDialog'
 
 interface WindowState {
   x?: number
@@ -51,6 +53,29 @@ let settingsService: SettingsService | null = null
 let libraryService: LibraryService | null = null
 let analysisService: AnalysisService | null = null
 let stemService: StemService | null = null
+let trayController: TrayController | null = null
+/** 真正要退出时为 true：close 拦截放行，避免「后台播放」把自己锁在里面 */
+let quitting = false
+let closeDialogOpen = false
+
+const rendererTarget = (): { url?: string; file?: string } => ({
+  url: process.env['ELECTRON_RENDERER_URL'],
+  file: join(__dirname, '../renderer/index.html')
+})
+
+function showMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+/** 关闭到后台：只隐藏窗口，播放继续，托盘图标留在系统隐藏图标区 */
+function hideToTray(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.hide()
+  trayController?.start()
+}
 
 registerSchemes()
 
@@ -113,7 +138,37 @@ function createWindow(): BrowserWindow {
     win.show()
   })
 
-  win.on('close', () => saveWindowState(win))
+  win.on('close', (event) => {
+    saveWindowState(win)
+    if (quitting) return
+    if (closeDialogOpen) {
+      event.preventDefault()
+      return
+    }
+    const behavior = settingsService?.get().closeBehavior ?? 'ask'
+    if (behavior === 'background') {
+      event.preventDefault()
+      hideToTray()
+      return
+    }
+    if (behavior === 'quit') {
+      // 记忆为「直接关闭」：放行这次 close，window-all-closed 会退出应用
+      quitting = true
+      return
+    }
+    event.preventDefault()
+    closeDialogOpen = true
+    void askCloseBehavior(win, rendererTarget(), nativeTheme.shouldUseDarkColors).then((decision) => {
+      closeDialogOpen = false
+      if (decision.action === 'cancel') return
+      if (decision.remember) settingsService?.patch({ closeBehavior: decision.action })
+      if (decision.action === 'background') hideToTray()
+      else {
+        quitting = true
+        app.quit()
+      }
+    })
+  })
   win.on('closed', () => {
     mainWindow = null
   })
@@ -172,6 +227,22 @@ app.whenReady().then(async () => {
     getWindow: () => mainWindow
   })
 
+  trayController = new TrayController({
+    renderer: rendererTarget(),
+    onCommand: (command) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('media/key', command)
+    },
+    onVolume: (value) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('media/volume', value)
+    },
+    onOpenMain: showMainWindow,
+    onQuit: () => {
+      quitting = true
+      app.quit()
+    }
+  })
+  trayController.start()
+
   applyOverlay(mainWindow, settingsService.get())
   nativeTheme.on('updated', () => {
     if (mainWindow && settingsService) applyOverlay(mainWindow, settingsService.get())
@@ -187,6 +258,14 @@ app.whenReady().then(async () => {
   if (pending.length > 0) analysisService.enqueueMany(pending, 3000)
 
   registerMediaKeys()
+
+  ipcMain.on('overlay/close-decision', (_e, decision: CloseDecision) => resolveCloseDecision(decision))
+  ipcMain.on('overlay/tray-command', (_e, command: string | { type: 'volume'; value: number }) =>
+    trayController?.handleCommand(command)
+  )
+  ipcMain.on('media/state', (_e, state: { playing: boolean; hasTrack: boolean; title: string; artist: string; volume: number }) => {
+    trayController?.updateState(state)
+  })
 
   ipcMain.on('files/dropped', (_e, paths: string[]) => {
     if (Array.isArray(paths) && paths.length > 0) void libraryService?.importPaths(paths)
@@ -233,6 +312,9 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  quitting = true
+  trayController?.destroy()
+  trayController = null
   globalShortcut.unregisterAll()
   analysisService?.dispose()
   libraryService?.dispose()
