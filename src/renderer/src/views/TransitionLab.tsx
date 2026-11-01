@@ -116,6 +116,9 @@ export function TransitionLab(): JSX.Element {
   const songs = useStore((s) => s.songs)
   const songIds = useStore((s) => s.songIds)
   const settings = useStore((s) => s.settings)
+  // 歌词面板是 380px 宽的浮层（right: 8px），Lab 的内容是全宽的，
+  // 面板打开时会压住右半列 —— 这里按面板宽度给它让位。
+  const lyricsOpen = useStore((s) => s.lyricsOpen)
   const [aId, setAId] = useState<string>('')
   const [bId, setBId] = useState<string>('')
   const [duration, setDuration] = useState(settings.automix.durationSec)
@@ -199,13 +202,22 @@ export function TransitionLab(): JSX.Element {
   }
 
   return (
-    <div className={viewStyles.page}>
+    <div
+      className={viewStyles.page}
+      style={lyricsOpen ? { paddingRight: 396, transition: 'padding-right 200ms var(--ease)' } : undefined}
+    >
       <h1 className="pageTitle" style={{ marginBottom: 6 }}>
         Transition Lab
       </h1>
       <p className="pageSubtitle" style={{ marginBottom: 22 }}>
         离线渲染任意两首歌的过渡，试听并导出 WAV。Ctrl+Shift+L 可随时打开
       </p>
+
+      {analyzed.length === 0 && (
+        <div className={styles.labHint}>
+          还没有分析完成的歌曲。等左下角「正在分析资料库」跑完，或先在歌曲页播放一首（分析优先处理正在听的）。
+        </div>
+      )}
 
       <div className={styles.labGrid}>
         <label>
@@ -262,18 +274,13 @@ export function TransitionLab(): JSX.Element {
           </button>
         </div>
         <div className={styles.buttonRow}>
-          <button
-            type="button"
-            className={styles.segment}
-            style={{ height: 30 }}
-            onClick={() => void render()}
-          >
+          <button type="button" className={styles.labButton} onClick={() => void render()}>
             离线渲染
           </button>
-          <button type="button" className={styles.segment} style={{ height: 30 }} onClick={() => void audition()}>
+          <button type="button" className={styles.labButton} onClick={() => void audition()}>
             试听
           </button>
-          <button type="button" className={styles.segment} style={{ height: 30 }} onClick={exportWav}>
+          <button type="button" className={styles.labButton} onClick={exportWav}>
             导出 WAV
           </button>
         </div>

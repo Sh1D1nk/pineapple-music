@@ -178,7 +178,7 @@ export class StemService {
       if (!modelExists(this.model)) throw new Error('模型文件已丢失')
 
       // 重活全在 worker：解码、STFT、ONNX 推理、iSTFT、写 WAV。
-      const result = await this.runInWorker(songId, song.path, this.model)
+      const result = await this.runInWorker(songId, song.path, this.model, song.durationSec ?? 0)
       if (result.type === 'cancelled') throw new Error('已取消')
       if (result.type === 'failed') throw new Error(result.error)
 
@@ -246,12 +246,17 @@ export class StemService {
     return worker
   }
 
-  private runInWorker(songId: string, songPath: string, modelFile: string): Promise<StemJobResult> {
+  private runInWorker(
+    songId: string,
+    songPath: string,
+    modelFile: string,
+    durationSec: number
+  ): Promise<StemJobResult> {
     const worker = this.ensureWorker()
     this.jobSongId = songId
     return new Promise<StemJobResult>((resolve) => {
       this.jobWaiter = resolve
-      this.sendToWorker({ type: 'job', songId, songPath, modelFile })
+      this.sendToWorker({ type: 'job', songId, songPath, modelFile, durationSec })
     })
   }
 

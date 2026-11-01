@@ -172,6 +172,34 @@
   color: var(--text-primary);
 }
 
+/* Lab 里的独立按钮：.segment 是「分段控件里的一项」，单独用没有背景，看起来像纯文本 */
+.labButton {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--separator);
+  transition: background 140ms var(--ease), box-shadow 140ms var(--ease);
+}
+
+.labButton:hover {
+  background: var(--hover-strong, var(--hover));
+  box-shadow: inset 0 0 0 1px var(--text-tertiary, var(--separator));
+}
+
+.labButton:active {
+  transform: scale(0.985);
+}
+
+.labHint {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 .labCanvas {
   width: 100%;
   height: 220px;

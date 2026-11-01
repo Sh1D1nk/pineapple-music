@@ -23,6 +23,8 @@ export interface StemJobRequest {
   songId: string
   songPath: string
   modelFile: string
+  /** 歌曲总时长（秒）：用来把分离范围收窄到歌尾窗口 */
+  durationSec?: number
 }
 
 export interface StemCancelRequest {
@@ -99,7 +101,19 @@ async function runJob(req: StemJobRequest): Promise<void> {
     const { ort, session, info } = ctx
 
     postProgress('decode', 0)
-    const clip = await decodeClip(songPath, { channels: 2, sampleRate: 44100 })
+    // 只分离「过渡判定需要的尾段」而不是整首：AutoMix 只看歌尾的人声退出点，
+    // 整轨分离（一首 4 分钟歌要几分钟）是不必要的。窗口语义由 StemInfo.window 记录。
+    const TAIL_WINDOW = 72
+    const durationSec = req.durationSec ?? 0
+    // durationSec 为 0（刚导入、metadata 还没写入）时会退化成整轨分离——
+    // 那是最慢的路径。正常流程（扫描完成后用户手动/自动入队）一定有值。
+    const tailStart = durationSec > TAIL_WINDOW ? Math.round(durationSec - TAIL_WINDOW) : 0
+    const clip = await decodeClip(songPath, {
+      channels: 2,
+      sampleRate: 44100,
+      start: tailStart > 0 ? tailStart : undefined,
+      duration: TAIL_WINDOW
+    })
     const [leftRaw, rightRaw] = clip.channels as [Float32Array, Float32Array]
     const length = Math.min(leftRaw.length, rightRaw.length)
 
@@ -170,11 +184,11 @@ async function runJob(req: StemJobRequest): Promise<void> {
     const monoVocal = new Float32Array(length)
     for (let i = 0; i < length; i++) monoVocal[i] = (vocals[0]![i]! + vocals[1]![i]!) * 0.5
     const curve = rmsCurve(monoVocal, clip.sampleRate, 0.05)
-    const phrases = detectPhrases(curve, 0.05, 0, 0.12, 0.6, 0.8)
+    const phrases = detectPhrases(curve, 0.05, tailStart, 0.12, 0.6, 0.8)
 
     const stem: StemInfo = {
       state: 'ready',
-      window: { start: 0, end: length / clip.sampleRate },
+      window: { start: tailStart, end: tailStart + length / clip.sampleRate },
       vocalCurve: curve,
       phrases,
       model: modelFile.split(/[\\/]/).pop() ?? modelFile,
