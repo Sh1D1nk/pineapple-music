@@ -45,32 +45,21 @@ const NAV: {
  *   气泡 —— bevel 14 / thickness 30：小尺寸玻璃，色散 2.4（≈3 倍于底栏），边缘带更亮
  */
 const BAR_LENS = {
-  bevel: 22,
-  thickness: 36,
+  // 70px 高的胶囊：bevel 24 ≈ 边缘带占 1/3，thickness 26 让折射弯曲可见但不把内容拉糊
+  bevel: 24,
+  thickness: 26,
   dispersion: 0.8,
   blur: 1,
-  slope: 2.6,
-  sat: 0.92,
-  shade: 0.34,
-  rim: 1.5,
+  slope: 2.4,
+  sat: 0.94,
+  shade: 0.28,
+  rim: 1.9,
   edgeW: 6,
   light: -140,
   materialize: 180
 }
 
-const PILL_LENS = {
-  bevel: 14,
-  thickness: 30,
-  dispersion: 2.4,
-  blur: 0.5,
-  slope: 2.6,
-  sat: 0.95,
-  shade: 0.3,
-  rim: 1.9,
-  edgeW: 5,
-  light: -140,
-  materialize: 160
-}
+
 
 const EDGE_DAMPING = 0.25
 const OVERSHOOT = 0.3
@@ -233,6 +222,17 @@ export function BottomBar(): JSX.Element {
     setProgress(activeIndex)
   }
 
+  /** 指针位置 → .bar 的 --dock-mx/--dock-my，驱动跟着走的柔光 */
+  const trackGlow = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    const bar = barRef.current
+    if (!bar) return
+    const rect = bar.getBoundingClientRect()
+    const mx = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 100
+    const my = ((event.clientY - rect.top) / Math.max(1, rect.height)) * 100
+    bar.style.setProperty('--dock-mx', `${mx.toFixed(1)}%`)
+    bar.style.setProperty('--dock-my', `${my.toFixed(1)}%`)
+  }
+
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0) return
     event.preventDefault()
@@ -348,10 +348,6 @@ export function BottomBar(): JSX.Element {
         api.attach(bar, BAR_LENS)
         attached.push({ el: bar, api })
       }
-      if (pill) {
-        api.attach(pill, PILL_LENS)
-        attached.push({ el: pill, api })
-      }
       setWebgl(api.supported())
     })
     return () => {
@@ -415,6 +411,12 @@ export function BottomBar(): JSX.Element {
         tabIndex={-1}
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
+        onPointerMove={trackGlow}
+        onPointerLeave={() => {
+          const bar = barRef.current
+          bar?.style.removeProperty('--dock-mx')
+          bar?.style.removeProperty('--dock-my')
+        }}
       >
         {/* 气泡分两层：wrap 只负责位移（不会被缩发放大），pill 只负责缩放与玻璃材质 */}
         <span
@@ -455,7 +457,7 @@ export function BottomBar(): JSX.Element {
                     else tabRefs.current.delete(entry.key)
                   }}
                   className={styles.tab}
-                  style={{ color: `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})` }}
+                  style={{ color: `rgba(${r}, ${g}, ${b}, ${Math.min(1, alpha + 0.1).toFixed(3)})` }}
                   onClick={() => activate(entry.key)}
                   title={entry.label}
                 >

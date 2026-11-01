@@ -38,8 +38,28 @@
      不支持 SVG backdrop-filter 的环境自动退回毛玻璃（var 的回退值） */
   backdrop-filter: var(--hyalite, blur(22px) saturate(170%));
   -webkit-backdrop-filter: var(--hyalite, blur(22px) saturate(170%));
-  box-shadow: var(--hyalite-edge, none), 0 12px 32px rgba(0, 0, 0, 0.32);
-  background: rgba(255, 255, 255, 0.05);
+  box-shadow: var(--hyalite-edge, none), 0 14px 34px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  /* 参考实现（simple-home-nav-bar）的玻璃语言：明确的着色 + 可见边框。
+     只给 0.05 白 + 0.5px 内描边时，深色 UI 上看起来只是一条透明塑料。 */
+  background: rgba(255, 255, 255, 0.1);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+}
+
+/* 鼠标跟随的柔光（参考实现的 ::before，mix-blend-mode: overlay） */
+.bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(
+    circle 130px at var(--dock-mx, 50%) var(--dock-my, 18%),
+    rgba(255, 255, 255, 0.16),
+    transparent 70%
+  );
+  mix-blend-mode: overlay;
 }
 
 /* ------------------------------------------------------------------ 横向轨道 */
@@ -95,12 +115,17 @@
   height: 100%;
   /* 胶囊圆角 + clip-path 双保险：任何缩放下四角都干净，不会露出直角 */
   border-radius: 28px;
-  clip-path: inset(0 round 28px);
-  background: rgba(255, 255, 255, 0.1);
-  /* 气泡的透镜参数（bevel 14 / dispersion 2.4）比轨道更「凸」，色散 ≈3 倍于底栏 */
-  backdrop-filter: var(--hyalite, blur(3px) saturate(160%));
-  -webkit-backdrop-filter: var(--hyalite, blur(3px) saturate(160%));
-  box-shadow: var(--hyalite-edge, none), 0 4px 14px rgba(0, 0, 0, 0.22);
+  /* 气泡 = 轨道玻璃内侧的一块磨砂高光（参考实现的 .glass-blob 就是这个做法）。
+     它不再自己折射：背后已经是轨道玻璃，两层折射会把白叠成一块死白。
+     模糊 + 顶部内高光 + 一圈细描边，足以交代「这块玻璃更厚一点」。 */
+  background: rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(8px) saturate(165%);
+  -webkit-backdrop-filter: blur(10px) saturate(165%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.16),
+    inset 0 -6px 10px rgba(255, 255, 255, 0.05),
+    0 4px 14px rgba(0, 0, 0, 0.28);
   transform-origin: center center;
   transform: scale(1);
   pointer-events: none;
@@ -117,6 +142,9 @@
 
 .tab {
   position: relative;
+  /* 整个 tab 浮在气泡之上：气泡的 backdrop-filter 会模糊它背后的一切，
+     只有把 tab 抬到气泡上层，图标和文字才是清晰的 */
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -138,7 +166,8 @@
 
 .icon {
   position: relative;
-  z-index: 0;
+  /* 图标浮在气泡之上：气泡只做背景高光，图标必须清晰（Apple 的指示器也是这样） */
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -175,13 +204,19 @@
   -webkit-backdrop-filter: blur(6px) saturate(160%);
 }
 
+/* 顶部那条渐变亮线（参考实现的 ::after）：玻璃「有一道光是打在边上」的来源，
+   没有它，边缘只有 hyalite 的 0.5px rim，深色底上几乎看不出来。 */
 .dock[data-webgl='1'] .bar::after {
   content: '';
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
   border-radius: inherit;
   pointer-events: none;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  z-index: 1;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
 }
 
 .dock[data-webgl='0'] .bar {

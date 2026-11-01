@@ -115,6 +115,8 @@ export function GlassProvider({ mode, children }: Props): ReactNode {
     let windowStart = last
     let slowWindows = 0
     const startedAt = last
+    // 30 ms ≈ 33 fps：只有真的持续掉到 33fps 以下才降级。
+    // （22ms/45fps 太敏感：播放页动画 + 玻璃同时跑时会误判，一启动就把 full 降成 lite）
     // 22 ms is one frame at 45 fps; on a 120 Hz panel the budget is 8.3 ms, so compare against the
     // measured refresh interval rather than a fixed number.
     const interval = 1000 / (window.screen ? 60 : 60)
@@ -132,11 +134,12 @@ export function GlassProvider({ mode, children }: Props): ReactNode {
         frames = 0
         total = 0
         windowStart = now
-        // One really bad window (>30 ms) is enough; a mildly slow one has to repeat.
-        const verySlow = avg > 30
-        if (!warm && avg > 22) {
+        // 只有连续三个窗口都慢才降级（一次 GC / 首帧尖峰不该把折射永久关掉）。
+        // 26 ms ≈ 38fps；42 ms 以上算「很糟」，记两分。
+        const verySlow = avg > 42
+        if (!warm && avg > 26) {
           slowWindows += verySlow ? 2 : 1
-          if (slowWindows >= 2) {
+          if (slowWindows >= 3) {
             setDegraded('帧耗时持续偏高，已自动降为简化液态玻璃')
             setNotice('已自动降为「简化」液态玻璃以保持流畅，可在设置中改回')
             return
