@@ -11,6 +11,7 @@ import { registerIpc, wireEvents, applyOverlay } from './ipc'
 import { registerProtocols, registerSchemes } from './protocols'
 import { windowStateFile } from './paths'
 import { TrayController } from './tray'
+import { NetMusicBridge } from './netMusic'
 import { askCloseBehavior, resolveCloseDecision, type CloseDecision } from './closeDialog'
 
 interface WindowState {
@@ -54,6 +55,7 @@ let libraryService: LibraryService | null = null
 let analysisService: AnalysisService | null = null
 let stemService: StemService | null = null
 let trayController: TrayController | null = null
+let netMusic: NetMusicBridge | null = null
 /** 真正要退出时为 true：close 拦截放行，避免「后台播放」把自己锁在里面 */
 let quitting = false
 let closeDialogOpen = false
@@ -77,6 +79,8 @@ function hideToTray(): void {
   trayController?.start()
 }
 
+// 必须在读取任何 app.getPath('userData') 之前改名，否则会落到旧目录
+app.setName('Pinnet')
 registerSchemes()
 
 const gotLock = app.requestSingleInstanceLock()
@@ -120,7 +124,7 @@ function createWindow(): BrowserWindow {
       symbolColor: dark ? '#f5f5f7' : '#1d1d1f',
       height: 48
     },
-    title: 'Pineapple Music',
+    title: 'Pinnet',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -189,8 +193,7 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
-  app.setName('Pineapple Music')
-  app.setAppUserModelId('com.pineapple.music')
+  app.setAppUserModelId('com.pinnet.player')
 
   settingsService = new SettingsService()
   const repo = openRepository()
@@ -243,6 +246,19 @@ app.whenReady().then(async () => {
   })
   trayController.start()
 
+  netMusic = new NetMusicBridge({
+    token: () => settingsService?.get().netMusicToken || 'pinnet',
+    onSnapshot: (snapshot, heartbeat) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('netmusic/state', { snapshot, heartbeat })
+      }
+    },
+    onStatus: (status) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('netmusic/status', status)
+    }
+  })
+  netMusic.start()
+
   applyOverlay(mainWindow, settingsService.get())
   nativeTheme.on('updated', () => {
     if (mainWindow && settingsService) applyOverlay(mainWindow, settingsService.get())
@@ -259,6 +275,11 @@ app.whenReady().then(async () => {
 
   registerMediaKeys()
 
+  ipcMain.handle('netmusic/status', () => {
+    const latest = netMusic?.latest()
+    return { status: latest?.status ?? { listening: false, connected: false, pluginVersion: null, token: 'pinnet', port: 17891, lastError: null }, snapshot: latest?.snapshot ?? null }
+  })
+  ipcMain.handle('netmusic/command', (_e, command) => Boolean(netMusic?.command(command)))
   ipcMain.on('overlay/close-decision', (_e, decision: CloseDecision) => resolveCloseDecision(decision))
   ipcMain.on('overlay/tray-command', (_e, command: string | { type: 'volume'; value: number }) =>
     trayController?.handleCommand(command)
@@ -303,12 +324,45 @@ function registerMediaKeys(): void {
   }
 }
 
-app.on('second-instance', () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.focus()
+/**
+ * pinnet://play?token=xxx —— 汽水音乐插件的「在 Pinnet 里播放」按钮。
+ * 单实例环境下第二次启动会把 URL 放到 argv，这里解析后打开网络音乐页。
+ */
+function handleProtocolUrl(raw: string | undefined): void {
+  if (!raw || !raw.startsWith('pinnet://')) return
+  showMainWindow()
+  if (!mainWindow) return
+  try {
+    const url = new URL(raw)
+    if (url.hostname === 'play' || url.pathname === '/play') {
+      mainWindow.webContents.send('navigate', { kind: 'netmusic' })
+      const token = url.searchParams.get('token')
+      if (token && settingsService && token !== settingsService.get().netMusicToken) {
+        settingsService.patch({ netMusicToken: token })
+      }
+    }
+  } catch {
+    /* ignore malformed URLs */
   }
+}
+
+app.setAsDefaultProtocolClient('pinnet')
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  handleProtocolUrl(url)
 })
+
+app.on('second-instance', (_event, argv) => {
+  const url = argv.find((arg) => arg.startsWith('pinnet://'))
+  if (url) {
+    handleProtocolUrl(url)
+    return
+  }
+  showMainWindow()
+})
+
+// 冷启动时协议 URL 在 argv 里
+handleProtocolUrl(process.argv.find((arg) => arg.startsWith('pinnet://')))
 
 app.on('window-all-closed', () => {
   app.quit()
@@ -316,6 +370,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   quitting = true
+  netMusic?.stop()
+  netMusic = null
   trayController?.destroy()
   trayController = null
   globalShortcut.unregisterAll()

@@ -162,7 +162,7 @@ export class TrayController {
       console.error('[tray] create failed:', err)
       return
     }
-    this.tray.setToolTip('Pineapple Music')
+    this.tray.setToolTip('Pinnet')
     // 左键和右键都打开同一份自绘菜单
     this.tray.on('click', () => this.toggleMenu())
     this.tray.on('right-click', () => this.toggleMenu())
@@ -175,7 +175,7 @@ export class TrayController {
     if (this.tray) {
       const label = this.state.hasTrack
         ? `${this.state.playing ? '正在播放' : '已暂停'} · ${this.state.title}${this.state.artist ? ' — ' + this.state.artist : ''}`
-        : 'Pineapple Music'
+        : 'Pinnet'
       this.tray.setToolTip(label)
     }
     if (patch.coverId !== undefined) this.applyIcon()

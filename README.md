@@ -1,4 +1,4 @@
-# Pineapple Music
+# Pinnet
 
 一款 Windows 桌面音乐播放器：Apple Music 桌面端的版式与交互，加上 macOS 26 式的**液态玻璃**（真实 SDF 折射，不是毛玻璃贴图）。
 
@@ -21,7 +21,7 @@ Electron + electron-vite + React 19 + TypeScript(strict) + Zustand，界面语�
 ```bash
 npm install            # 依赖安装（.npmrc 已预设 legacy-peer-deps 与 electron 镜像）
 npm run dev            # 开发模式，直接打开应用窗口
-npm run build          # 产出 Windows 安装包 dist/Pineapple Music-<版本>-setup.exe（当前 1.3.4）
+npm run build          # 产出 Windows 安装包 dist/Pinnet-<版本>-setup.exe（当前 1.3.4）
 ```
 
 其它脚本：
@@ -250,7 +250,7 @@ LICENSE                   AGPL-3.0-only 全文
 | 3 | 模糊态没有玻璃磨边 | 描边只在 `.glass` 的 inset shadow 里，Hyalite 的 `--hyalite-edge` 会覆盖它 | 每个胶囊加 `::after` 画 1px `--glass-stroke` + 顶部 1px 高光，三档材质都保留 | `TopBar.module.css` |
 | 4 | 两首歌同时播放 | `load()`/`crossfadeTo()` 不停另一块 deck；暂停定时器会把新 deck 停掉 | 新增 `silenceOther()`（pause + 清 src + 归零 gain）并在 load/crossfade/handoff 里调用；`pauseTimers` 可取消且校验 active | `audio/engine.ts` |
 | 5 | 切换永远显示 D 级 | ①「接下来播放」改队列但不改当前歌曲，调度器提前 return，从不重新规划；②拍点稳定度阈值 0.55 过严 | 订阅 key 加入「下一首 id」；阈值降到 0.4；设置页新增「分轨模型」区块（下载页 / 导入 .onnx / 打开模型目录 + 当前级别） | `audio/automix.ts`、`shared/transition/planner.ts`、`views/SettingsView.tsx`、`main/ipc.ts` |
-| 6 | 改名 | — | 应用名、窗口标题、安装包、快捷方式、userData 目录全部改为 Pineapple Music | `package.json`、`electron-builder.yml`、`index.html`、`main/index.ts` |
+| 6 | 改名 | — | 应用名、窗口标题、安装包、快捷方式、userData 目录全部改为 Pinnet | `package.json`、`electron-builder.yml`、`index.html`、`main/index.ts` |
 | 7 | 传输按钮与实际状态不同步 | ①`play()` 的 promise 偶尔不 settle，phase 卡在 loading；②bridge 恢复后 phase 没回 `bridge`；③按钮被窗口拖拽区吞掉 | `toggle()` 改用 `snapshot().playing` 单一判据；`play()` 加 3s 上限 + 重试 + 以元素 `paused` 为准；`resumeBridge()` 补 phase | `audio/engine.ts` |
 | 8 | 点歌名/作者/进度无反应 | 整个顶栏是 `-webkit-app-region: drag`，只有 button 被排除，进度条与标题块不是 button | 标题块改成 `<button>` 打开全屏；进度、音量、胶囊内元素统一 `no-drag`；`.bar` 改为 `pointer-events:none` + 子元素 auto | `TopBar.tsx`、`TopBar.module.css` |
 | 9 | 选中行圆角太方 | 行圆角硬编码 8px | 令牌 `--radius-row` 改 12px 并在行上引用 | `styles/tokens.css`、`views.module.css` |

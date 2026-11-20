@@ -56,7 +56,9 @@ const INVOKE_CHANNELS = [
   'window/setFullScreen',
   'window/isFullScreen',
   'window/toggleMaximize',
-  'window/state'
+  'window/state',
+  'netmusic/status',
+  'netmusic/command'
 ] as const
 
 type InvokeChannel = (typeof INVOKE_CHANNELS)[number]

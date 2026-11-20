@@ -190,7 +190,7 @@ function ModelSection(): JSX.Element {
         <div className={styles.guideRow}>
           <span className={styles.guideLabel}>存放位置</span>
           <span className={styles.guideValue}>
-            <span className={styles.pathBox}>{status?.dir ?? '%APPDATA%\\Pineapple Music\\models\\'}</span>
+            <span className={styles.pathBox}>{status?.dir ?? '%APPDATA%\\Pinnet\\models\\'}</span>
             <span className={styles.guideActions}>
               <button type="button" className={styles.segment} onClick={() => void bridge.models.reveal()}>
                 打开模型目录

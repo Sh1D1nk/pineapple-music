@@ -5,7 +5,7 @@ import { ProgressWidget } from './ProgressWidget'
 import styles from './Sidebar.module.css'
 
 const NAV: {
-  key: 'recent' | 'artists' | 'albums' | 'songs' | 'favorites'
+  key: 'recent' | 'artists' | 'albums' | 'songs' | 'favorites' | 'netmusic'
   label: string
   icon: IconName
 }[] = [
@@ -26,6 +26,11 @@ export function Sidebar(): JSX.Element {
   const songIds = useStore((s) => s.songIds)
   const playRandom = useStore((s) => s.playRandom)
   const pushToast = useStore((s) => s.pushToast)
+  const netConnected = useStore((s) => s.netStatus.connected)
+  // 汽水音乐插件连上时才出现；断开就消失，PM 回到纯本地
+  const navItems = netConnected
+    ? [...NAV, { key: 'netmusic' as const, label: '网络音乐', icon: 'waveform' as IconName }]
+    : NAV
 
   const onRandom = (): void => {
     if (songIds.length === 0) {
@@ -132,7 +137,7 @@ export function Sidebar(): JSX.Element {
             aria-hidden="true"
           />
         )}
-        {NAV.map((entry) => {
+        {navItems.map((entry) => {
           const active = view.kind === entry.key || (entry.key === 'recent' && view.kind === 'album')
           return (
             <button

@@ -56,7 +56,7 @@ export function CloseDialog({ dark }: { dark: boolean }): JSX.Element {
   return (
     <div className={styles.shell}>
       <div ref={cardRef} className={`${styles.card} ${styles.alert}`}>
-        <div className={styles.alertTitle}>关闭 Pineapple Music？</div>
+        <div className={styles.alertTitle}>关闭 Pinnet？</div>
         <div className={styles.alertBody}>音乐可以继续在后台播放，也可以直接退出。</div>
 
         <label className={styles.alertRemember} onClick={() => setRemember((v) => !v)}>

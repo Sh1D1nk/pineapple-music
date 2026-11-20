@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { useStore } from './state/store'
 import { useTrayBridge } from './hooks/useTrayBridge'
+import { useNetMusicBridge } from './hooks/useNetMusicBridge'
+import { NetMusicView } from './views/NetMusicView'
 import { GlassProvider } from './glass/GlassProvider'
 import { Sidebar } from './components/Sidebar'
 import { BottomBar } from './components/BottomBar'
@@ -179,9 +181,17 @@ function navClass(direction: 'left' | 'right' | 'none'): string {
 
 function Pages(): JSX.Element {
   useTrayBridge()
+  useNetMusicBridge()
+  useEffect(() => {
+    // 插件点「在 Pinnet 里播放」→ 主进程转发过来
+    return window.lm.on('navigate', ((view: { kind: string }) => {
+      if (view?.kind) useStore.getState().setView(view as never)
+    }) as never)
+  }, [])
   const view = useStore((s) => s.view)
   const songCount = useStore((s) => s.songIds.length)
 
+  if (view.kind === 'netmusic') return <NetMusicView />
   if (view.kind === 'settings') return <SettingsView />
   if (view.kind === 'lab') return <TransitionLab />
   if (songCount === 0) return <EmptyState />

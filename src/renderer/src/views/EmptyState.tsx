@@ -13,7 +13,7 @@ export function EmptyState(): JSX.Element {
       </div>
       <div className={styles.emptyTitle}>添加你的音乐</div>
       <div className={styles.emptyText}>
-        选择一个音乐文件夹，Pineapple Music 会在后台读取标签、封面与歌词，并把节拍分析准备好。扫描过程中已入库的歌曲可以立即播放。
+        选择一个音乐文件夹，Pinnet 会在后台读取标签、封面与歌词，并把节拍分析准备好。扫描过程中已入库的歌曲可以立即播放。
       </div>
       <button type="button" className={styles.primaryButton} onClick={() => void bridge.pickFolder()}>
         <Icon name="folderPlus" size={15} />

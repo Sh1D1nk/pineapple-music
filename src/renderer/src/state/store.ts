@@ -11,6 +11,7 @@ import type {
   SongMeta
 } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/types'
+import type { NetLyricLine, NetStatus, NetTrack } from '@shared/netmusic'
 import { bridge } from '../bridge'
 import { nextQueueIndex, prevQueueIndex } from '../lib/queueNav'
 import { engine, type EngineSnapshot } from '../audio/engine'
@@ -26,6 +27,18 @@ export type View =
   | { kind: 'search' }
   | { kind: 'settings' }
   | { kind: 'lab' }
+  | { kind: 'netmusic' }
+
+export interface NetMusicState {
+  track: NetTrack | null
+  lyrics: NetLyricLine[]
+  playing: boolean
+  basePositionMs: number
+  baseAt: number
+  durationMs: number
+  volume: number
+  muted: boolean
+}
 
 export interface ContextMenuState {
   x: number
@@ -103,6 +116,9 @@ interface StoreState {
   playback: PlaybackState
   lyrics: LyricsPayload | null
   lyricsLoading: boolean
+  /** 汽水音乐（插件桥）送来的状态；播放进度靠 basePositionMs + baseAt 本地插值 */
+  netMusic: NetMusicState
+  netStatus: NetStatus
 
   init: () => Promise<void>
   setView: (view: View, options?: { silent?: boolean }) => void
@@ -118,6 +134,8 @@ interface StoreState {
   setLyricsSettingsOpen: (open: boolean) => void
   setLyricsQualityLevel: (level: number) => void
   setDragActive: (active: boolean) => void
+  setNetMusic: (patch: Partial<NetMusicState>) => void
+  setNetStatus: (status: NetStatus) => void
   pushToast: (text: string) => void
   dismissToast: (id: number) => void
   toggleFavoriteSong: (id: string) => Promise<void>
@@ -288,6 +306,24 @@ export const useStore = create<StoreState>((set, get) => {
     dragActive: false,
     lyrics: null,
     lyricsLoading: false,
+    netMusic: {
+      track: null,
+      lyrics: [],
+      playing: false,
+      basePositionMs: 0,
+      baseAt: 0,
+      durationMs: 0,
+      volume: 1,
+      muted: false
+    },
+    netStatus: {
+      listening: false,
+      connected: false,
+      pluginVersion: null,
+      token: 'pinnet',
+      port: 17891,
+      lastError: null
+    },
     playback: {
       queue: [],
       index: 0,
@@ -492,6 +528,12 @@ export const useStore = create<StoreState>((set, get) => {
     },
     setDragActive(active) {
       set({ dragActive: active })
+    },
+    setNetMusic(patch) {
+      set((state) => ({ netMusic: { ...state.netMusic, ...patch } }))
+    },
+    setNetStatus(status) {
+      set({ netStatus: status })
     },
     pushToast(text) {
       const id = Date.now() + Math.random()

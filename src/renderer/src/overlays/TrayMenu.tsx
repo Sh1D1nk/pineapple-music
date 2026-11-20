@@ -176,7 +176,7 @@ export function TrayMenu({ dark }: { dark: boolean }): JSX.Element {
           <span className={styles.rowIcon}>
             <Icon name="music" size={13} />
           </span>
-          <span className={styles.rowLabel}>打开 Pineapple Music</span>
+          <span className={styles.rowLabel}>打开 Pinnet</span>
         </button>
         <button type="button" className={`${styles.row} ${styles.rowDanger}`} onClick={() => command('quit')}>
           <span className={styles.rowIcon}>

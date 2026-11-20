@@ -406,7 +406,7 @@ export function LyricsSettingsDialog(): JSX.Element | null {
                   快捷键：<b>Ctrl + Alt + L</b> 开关歌词页，<b>Ctrl + L</b> 开关侧边歌词面板，<b>Esc</b> 依次收起菜单 /
                   设置窗 / 歌词页；歌词页内右键打开菜单，歌词行右键可复制该行。
                 </p>
-                <p>应用版本 {version || '…'} · 设置与设置页共用同一份（%APPDATA%\Pineapple Music\settings.json）。</p>
+                <p>应用版本 {version || '…'} · 设置与设置页共用同一份（%APPDATA%\Pinnet\settings.json）。</p>
               </div>
             ) : (
               <>
