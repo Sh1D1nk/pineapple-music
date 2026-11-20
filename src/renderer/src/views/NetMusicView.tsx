@@ -73,6 +73,7 @@ export function NetMusicView(): JSX.Element {
 
         <div className={styles.right}>
           {net.lyrics.length > 0 ? (
+            <div className={styles.lyricWrap}>
             <LyricPlayer
               ref={playerRef as never}
               lyricLines={lines}
@@ -84,6 +85,7 @@ export function NetMusicView(): JSX.Element {
               enableScale
               style={{ '--amll-lp-font-size': '26px', '--amll-lp-color': 'var(--text-primary)' } as never}
             />
+            </div>
           ) : (
             <div className={styles.noLyric}>{connected ? '这首歌没有歌词' : '连上汽水音乐后，歌词会显示在这里'}</div>
           )}
