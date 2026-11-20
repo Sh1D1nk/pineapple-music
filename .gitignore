@@ -15,3 +15,5 @@ screenshots/
 # 临时探针脚本（专家复核期间产生）
 tmp-*.cjs
 tmp-*.mjs
+soda37/
+soda38/

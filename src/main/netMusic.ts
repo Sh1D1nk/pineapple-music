@@ -62,11 +62,13 @@ export class NetMusicBridge {
       return
     }
     this.server.on('listening', () => {
+      console.log('[netmusic] bridge listening on 127.0.0.1:' + port)
       this.startAttempts = 0
       this.lastError = null
       this.emitStatus()
     })
     this.server.on('error', (err: Error) => {
+      console.log('[netmusic] bridge error:', err.message)
       this.lastError = err.message
       this.emitStatus()
       // TIME_WAIT / 端口被占：退避重试，直到绑上（Windows 上重启后要等 2 分钟才释放）
@@ -76,6 +78,7 @@ export class NetMusicBridge {
     })
     this.server.on('connection', (socket, request) => {
       const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`)
+      console.log('[netmusic] connection attempt, token match:', url.searchParams.get('token') === this.opts.token())
       if (url.searchParams.get('token') !== this.opts.token()) {
         socket.close(4001, 'bad token')
         return
@@ -90,8 +93,10 @@ export class NetMusicBridge {
       }
       this.client = socket
       this.emitStatus()
+      console.log('[netmusic] plugin connected, version:', String(this.pluginVersion))
       socket.on('message', (raw) => this.onMessage(raw.toString()))
       socket.on('close', () => {
+        console.log('[netmusic] plugin socket closed')
         if (this.client === socket) {
           this.client = null
           this.pluginVersion = null

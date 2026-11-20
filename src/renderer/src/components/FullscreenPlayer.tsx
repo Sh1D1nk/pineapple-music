@@ -107,11 +107,19 @@ export function FullscreenPlayer(): JSX.Element {
     ? {
         songId: 'net-' + (net.track?.id ?? ''),
         kind: 'synced' as const,
-        lines: net.lyrics.map((l) => ({
-          ...l,
-          translatedLyric: l.translatedLyric ?? '',
-          romanLyric: l.romanLyric ?? ''
-        }))
+        /* 防御：AMLL 会对缺时间戳/words 的行直接抛错把整棵树崩掉，
+           远端数据一律先过滤畸形行、补 words 兜底再喂给歌词组件 */
+        lines: net.lyrics
+          .filter((l) => l && typeof l.startTime === 'number' && typeof l.endTime === 'number')
+          .map((l) => ({
+            ...l,
+            words:
+              Array.isArray(l.words) && l.words.length
+                ? l.words
+                : [{ startTime: l.startTime, endTime: l.endTime, word: l.text || '' }],
+            translatedLyric: l.translatedLyric ?? '',
+            romanLyric: l.romanLyric ?? ''
+          }))
       }
     : null
   const lyricsForCurrent = remote

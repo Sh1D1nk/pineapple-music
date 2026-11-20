@@ -347,7 +347,14 @@ function handleProtocolUrl(raw: string | undefined): void {
   }
 }
 
-app.setAsDefaultProtocolClient('pinnet')
+/* 开发模式下必须显式带上 app 目录：打包后 exe 自身就是 app，直接 "%1" 即可；
+   开发时注册成 `electron.exe "%1"` 会让 Windows 把 pinnet:// URL 当成 app 路径，
+   弹 "Error launching app"。 */
+if (app.isPackaged) {
+  app.setAsDefaultProtocolClient('pinnet')
+} else {
+  app.setAsDefaultProtocolClient('pinnet', process.execPath, [app.getAppPath()])
+}
 app.on('open-url', (event, url) => {
   event.preventDefault()
   handleProtocolUrl(url)

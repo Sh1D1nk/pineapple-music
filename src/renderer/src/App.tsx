@@ -185,7 +185,13 @@ function Pages(): JSX.Element {
   useEffect(() => {
     // 插件点「在 Pinnet 里播放」→ 主进程转发过来
     return window.lm.on('navigate', ((view: { kind: string }) => {
-      if (view?.kind) useStore.getState().setView(view as never)
+      if (view?.kind === 'netmusic') {
+        useStore.getState().setView(view as never)
+        // 和侧栏入口一致：直接落到全屏歌词页（远端模式，显示汽水正在播的曲目）
+        useStore.getState().setFullscreen(true)
+      } else if (view?.kind) {
+        useStore.getState().setView(view as never)
+      }
     }) as never)
   }, [])
   const view = useStore((s) => s.view)
