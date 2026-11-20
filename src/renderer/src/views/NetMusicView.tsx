@@ -3,12 +3,12 @@ import { LyricPlayer } from '@applemusic-like-lyrics/react'
 import type { LyricLine } from '@applemusic-like-lyrics/lyric'
 import { Icon } from '../components/Icon'
 import { useStore } from '../state/store'
-import viewStyles from '../components/views.module.css'
 import styles from './NetMusicView.module.css'
 
 /**
- * 「网络音乐」页：把汽水音乐通过插件送来的封面/歌词/进度画出来，
- * 控制指令回给插件执行（PM 本身不解码、不播放汽水音频）。
+ * 「网络音乐」= 汽水音乐的歌词界面。
+ * 版式对齐 PM 自己的全屏歌词页：封面模糊当背景、歌词铺满、底部一条控制栏。
+ * Pinnet 不解码、不播放汽水音频，所有控制都转发给插件执行。
  */
 export function NetMusicView(): JSX.Element {
   const net = useStore((s) => s.netMusic)
@@ -44,71 +44,72 @@ export function NetMusicView(): JSX.Element {
 
   const total = net.durationMs || 0
   const live = net.playing ? net.basePositionMs + (performance.now() - net.baseAt) : net.basePositionMs
+  const cover = net.track?.coverUrl ?? null
 
   return (
-    <div className={viewStyles.page}>
-      <div className={styles.head}>
-        <div className={styles.title}>网络音乐</div>
-        <div className={styles.sub}>
-          {connected
-            ? `已连接汽水音乐${netStatus.pluginVersion ? ' · 插件 ' + netStatus.pluginVersion : ''}`
-            : '等待汽水音乐插件连接（在插件设置里点「在 Pinnet 里播放」）'}
-        </div>
-      </div>
+    <div className={styles.stage}>
+      {cover && (
+        <img
+          className={styles.bg}
+          src={cover}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          referrerPolicy="no-referrer"
+        />
+      )}
+      <div className={styles.veil} aria-hidden="true" />
 
-      <div className={styles.stage}>
-        <div className={styles.left}>
-          <div className={styles.coverWrap}>
-            {net.track?.coverUrl ? (
-              <img className={styles.cover} src={net.track.coverUrl} alt="" draggable={false} />
-            ) : (
-              <div className={styles.coverEmpty}>
-                <Icon name="music" size={34} />
-              </div>
-            )}
+      <div className={styles.content}>
+        <div className={styles.head}>
+          <div className={styles.meta}>
+            <div className={styles.title}>{net.track?.title ?? '没有在播放的歌曲'}</div>
+            <div className={styles.sub}>
+              {net.track?.artists ?? (connected ? '在汽水音乐里播放一首' : '等待汽水音乐插件连接')}
+              {connected ? '' : ' · 未连接'}
+            </div>
           </div>
-          <div className={styles.metaTitle}>{net.track?.title ?? '没有在播放的歌曲'}</div>
-          <div className={styles.metaSub}>{net.track?.artists ?? (connected ? '在汽水音乐里播放一首' : '未连接')}</div>
+          {!connected && <div className={styles.badge}>未连接</div>}
         </div>
 
-        <div className={styles.right}>
-          {net.lyrics.length > 0 ? (
+        <div className={styles.lyrics}>
+          {lines.length > 0 ? (
             <div className={styles.lyricWrap}>
-            <LyricPlayer
-              ref={playerRef as never}
-              lyricLines={lines}
-              playing={net.playing && connected}
-              alignAnchor="center"
-              alignPosition={0.42}
-              enableSpring
-              enableBlur
-              enableScale
-              style={{ '--amll-lp-font-size': '26px', '--amll-lp-color': 'var(--text-primary)' } as never}
-            />
+              <LyricPlayer
+                ref={playerRef as never}
+                lyricLines={lines}
+                playing={net.playing && connected}
+                alignAnchor="center"
+                alignPosition={0.5}
+                enableSpring
+                enableBlur
+                enableScale
+                style={{ '--amll-lp-font-size': '34px', '--amll-lp-color': '#fff' } as never}
+              />
             </div>
           ) : (
-            <div className={styles.noLyric}>{connected ? '这首歌没有歌词' : '连上汽水音乐后，歌词会显示在这里'}</div>
+            <div className={styles.empty}>
+              {connected ? (net.track ? '这首歌没有歌词' : '在汽水音乐里播放一首歌') : '连上汽水音乐后，歌词会显示在这里'}
+            </div>
           )}
         </div>
-      </div>
 
-      <div className={styles.controls}>
-        <button type="button" className={styles.ctrlBtn} onClick={() => send({ type: 'prev' })} title="上一首">
-          <Icon name="prev" size={16} />
-        </button>
-        <button
-          type="button"
-          className={`${styles.ctrlBtn} ${styles.ctrlMain}`}
-          onClick={() => send({ type: 'toggle' })}
-          title={net.playing ? '暂停' : '播放'}
-        >
-          <Icon name={net.playing ? 'pause' : 'play'} size={18} />
-        </button>
-        <button type="button" className={styles.ctrlBtn} onClick={() => send({ type: 'next' })} title="下一首">
-          <Icon name="next" size={16} />
-        </button>
+        <div className={styles.controls}>
+          <button type="button" className={styles.ctrlBtn} onClick={() => send({ type: 'prev' })} title="上一首">
+            <Icon name="prev" size={16} />
+          </button>
+          <button
+            type="button"
+            className={`${styles.ctrlBtn} ${styles.ctrlMain}`}
+            onClick={() => send({ type: 'toggle' })}
+            title={net.playing ? '暂停' : '播放'}
+          >
+            <Icon name={net.playing ? 'pause' : 'play'} size={18} />
+          </button>
+          <button type="button" className={styles.ctrlBtn} onClick={() => send({ type: 'next' })} title="下一首">
+            <Icon name="next" size={16} />
+          </button>
 
-        <div className={styles.progress}>
           <span className={styles.time}>{fmt(live)}</span>
           <input
             type="range"
@@ -120,27 +121,21 @@ export function NetMusicView(): JSX.Element {
             aria-label="进度"
           />
           <span className={styles.time}>{fmt(total)}</span>
-        </div>
 
-        <div className={styles.volume}>
-          <Icon name="waveform" size={14} />
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={Math.round((net.volume ?? 1) * 100)}
-            className={styles.slider}
-            onChange={(event) => send({ type: 'volume', value: Number(event.target.value) / 100 })}
-            aria-label="音量"
-          />
+          <div className={styles.volume}>
+            <Icon name="waveform" size={14} />
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round((net.volume ?? 1) * 100)}
+              className={styles.slider}
+              onChange={(event) => send({ type: 'volume', value: Number(event.target.value) / 100 })}
+              aria-label="音量"
+            />
+          </div>
         </div>
       </div>
-
-      {!connected && (
-        <div className={styles.hint}>
-          打开汽水音乐 → 插件设置（右下角按钮）→ 点「在 Pinnet 里播放」。端口 {17891}，token 见设置页。
-        </div>
-      )}
     </div>
   )
 }

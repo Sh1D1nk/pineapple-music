@@ -21,7 +21,9 @@ interface BridgeOptions {
   port?: number
   token: () => string
   /** 状态变化（snapshot / 心跳）时回调给渲染进程 */
-  onSnapshot: (snapshot: NetSnapshot, heartbeat: NetHeartbeat | null) => void
+  onSnapshot: (snapshot: NetSnapshot) => void
+  /** 进度心跳：只带 position/playing，渲染进程单独处理，避免歌词随之重建 */
+  onHeartbeat: (heartbeat: NetHeartbeat) => void
   onStatus: (status: NetStatus) => void
 }
 
@@ -129,7 +131,7 @@ export class NetMusicBridge {
     }
     if (msg.type === 'state') {
       this.snapshot = msg.snapshot
-      this.opts.onSnapshot(msg.snapshot, null)
+      this.opts.onSnapshot(msg.snapshot)
       return
     }
     if (msg.type === 'heartbeat') {
@@ -137,7 +139,7 @@ export class NetMusicBridge {
         this.snapshot.positionMs = msg.heartbeat.positionMs
         this.snapshot.playing = msg.heartbeat.playing
       }
-      this.opts.onSnapshot(this.snapshot ?? emptySnapshot(), msg.heartbeat)
+      this.opts.onHeartbeat(msg.heartbeat)
     }
   }
 

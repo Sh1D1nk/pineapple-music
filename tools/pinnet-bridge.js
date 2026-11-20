@@ -19,6 +19,38 @@
   const token = () => localStorage.getItem('pinnet-token') || 'pinnet'
   const port = () => Number(localStorage.getItem('pinnet-port') || 17891)
 
+  /* Pinnet 是 file:// / localhost，直接加载汽水 CDN 的封面会被防盗链挡掉，
+     所以在汽水这边 fetch 成 data URL 再推过去（带正确 Referer / Cookie）。 */
+  let coverCache = { src: '', dataUrl: '' }
+  let coverPending = ''
+  function refreshCover() {
+    const a = A()
+    const src = a && a.__coverUrl
+    if (!src || src === coverCache.src || src === coverPending) return
+    coverPending = src
+    fetch(src, { credentials: 'omit' })
+      .then((r) => r.blob())
+      .then(
+        (blob) =>
+          new Promise((resolve) => {
+            const fr = new FileReader()
+            fr.onload = () => resolve(String(fr.result))
+            fr.onerror = () => resolve('')
+            fr.readAsDataURL(blob)
+          })
+      )
+      .then((dataUrl) => {
+        if (dataUrl && coverPending === src) {
+          coverCache = { src, dataUrl }
+          pushState(true)
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (coverPending === src) coverPending = ''
+      })
+  }
+
   function snapshot() {
     const a = A()
     if (!a) return null
@@ -37,7 +69,7 @@
             title: pl.name || '',
             artists,
             album: (pl.album && pl.album.name) || '',
-            coverUrl: a.__coverUrl || null,
+            coverUrl: coverCache.dataUrl || null,
             durationMs: Math.round(a.durationMs || 0)
           }
         : null,
@@ -170,6 +202,7 @@
   }
 
   setInterval(() => {
+    refreshCover()
     if (ws && ws.readyState === 1) pushState(false)
   }, 250)
   new MutationObserver(injectButton).observe(document.documentElement, { subtree: true, childList: true })

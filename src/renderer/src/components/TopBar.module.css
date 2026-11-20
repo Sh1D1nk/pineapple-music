@@ -442,3 +442,22 @@
   position: relative;
   z-index: 1;
 }
+
+
+/* ------------------------------------------------------------------ 传统底栏变体 */
+/* 把整条控制栏从顶部搬到窗口底部：内容仍是同一棵 DOM，只是换定位与留白 */
+.barBottom {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: auto;
+  height: 64px;
+  padding: 0 16px;
+  border-radius: 0;
+  background: var(--bg-content);
+  box-shadow:
+    0 -1px 0 var(--separator),
+    0 -12px 32px rgba(0, 0, 0, 0.22);
+  z-index: 45;
+}

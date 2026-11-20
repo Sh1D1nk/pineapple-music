@@ -412,6 +412,16 @@ export function SettingsView(): JSX.Element {
             onChange={(closeBehavior) => void update({ closeBehavior })}
           />
         </Row>
+        <Row label="播放控制栏" hint="「传统底栏」把播放/进度/音量搬到窗口底部（液态玻璃导航会自动上移让位）">
+          <Segmented
+            value={settings.controlBar}
+            options={[
+              { value: 'top', label: '顶栏' },
+              { value: 'bottom', label: '传统底栏' }
+            ]}
+            onChange={(controlBar) => void update({ controlBar })}
+          />
+        </Row>
         <Row
           label="液态玻璃"
           hint={`当前生效：${

@@ -323,11 +323,11 @@ function PanelGroup(): JSX.Element {
   )
 }
 
-export function TopBar(): JSX.Element {
+export function TopBar({ variant = 'top' }: { variant?: 'top' | 'bottom' }): JSX.Element {
   const settings = useStore((s) => s.settings)
   return (
     <div
-      className={styles.bar}
+      className={`${styles.bar} ${variant === 'bottom' ? styles.barBottom : ''}`}
       style={
         {
           '--bar-blur': `${settings.barBlur}px`,

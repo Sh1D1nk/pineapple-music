@@ -50,10 +50,25 @@ export function useNetMusicBridge(): void {
       if (payload?.snapshot) applySnapshot(payload.snapshot)
     }) as never)
 
+    // 心跳只碰时钟，不碰歌词数组 —— 之前把心跳塞进 state 里，每 1.5s 重建一次
+    // 歌词列表，画面就会周期性闪。
+    const offBeat = window.lm.on('netmusic/heartbeat', ((hb: { positionMs: number; playing: boolean }) => {
+      if (!hb || !Number.isFinite(hb.positionMs)) return
+      const st = useStore.getState().netMusic
+      const live = st.playing ? st.basePositionMs + (performance.now() - st.baseAt) : st.basePositionMs
+      const drift = Math.abs(hb.positionMs - live)
+      if (drift > 800) {
+        useStore.getState().setNetMusic({ basePositionMs: hb.positionMs, baseAt: performance.now(), playing: hb.playing })
+      } else if (hb.playing !== st.playing) {
+        useStore.getState().setNetMusic({ playing: hb.playing, basePositionMs: live, baseAt: performance.now() })
+      }
+    }) as never)
+
     return () => {
       disposed = true
       offStatus()
       offState()
+      offBeat()
     }
   }, [])
 }

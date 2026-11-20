@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { join } from 'node:path'
-import { cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 
 /**
  * All mutable state lives under %APPDATA%/Pineapple Music. The cache layout is intentionally flat and
@@ -13,18 +13,53 @@ function ensure(dir: string): string {
 
 /**
  * 改名迁移：Pineapple Music → Pinnet。
- * 新目录为空且旧目录存在时，整棵拷过去（曲库/设置/封面/歌词缓存/分轨结果都在里面）。
- * 只拷一次：新目录一旦有内容就不再动，避免覆盖用户升级后的数据。
+ *
+ * 判定用「数据文件」而不是「目录是否为空」：Electron 在启动时就会在 userData 里
+ * 建 Cache / GPU 缓存，readdir 永远非空，用目录判空会让迁移永远不执行。
+ * 只搬数据项，不搬浏览器缓存；迁移成功写 migrate.done，之后不再重复。
  */
+const MIGRATED_MARK = 'migrate.done'
+const DATA_ITEMS = [
+  'library.db',
+  'library.db-wal',
+  'library.db-shm',
+  'library.json',
+  'settings.json',
+  'favorites.json',
+  'tasks.json',
+  'queue.json',
+  'covers',
+  'lyrics-cache',
+  'stems',
+  'analysis',
+  'models'
+]
+
 function migrateLegacyData(target: string): void {
   try {
-    if (existsSync(target) && readdirSync(target).length > 0) return
+    if (existsSync(join(target, MIGRATED_MARK))) return
     const appData = app.getPath('appData')
     for (const legacyName of ['Pineapple Music', 'Noctis']) {
       const legacy = join(appData, legacyName)
-      if (!existsSync(legacy) || legacy === target) continue
-      cpSync(legacy, target, { recursive: true, force: false, errorOnExist: false })
-      console.log('[migrate] copied', legacy, '->', target)
+      if (legacy === target) continue
+      if (!existsSync(join(legacy, 'library.db')) && !existsSync(join(legacy, 'library.json'))) continue
+      // 新目录已经有数据库（上一次启动创建的空库）→ 用旧库覆盖，别的数据只在缺失时补
+      for (const item of DATA_ITEMS) {
+        const from = join(legacy, item)
+        if (!existsSync(from)) continue
+        const to = join(target, item)
+        try {
+          if (item.startsWith('library.db') || item.endsWith('.json')) {
+            cpSync(from, to, { force: true })
+          } else if (!existsSync(to)) {
+            cpSync(from, to, { recursive: true })
+          }
+        } catch (err) {
+          console.error('[migrate] item failed', item, err)
+        }
+      }
+      writeFileSync(join(target, MIGRATED_MARK), JSON.stringify({ from: legacy, at: Date.now() }))
+      console.log('[migrate] copied data from', legacy)
       return
     }
   } catch (err) {

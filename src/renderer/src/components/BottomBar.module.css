@@ -262,3 +262,9 @@
     transition: none;
   }
 }
+
+
+/* 传统底栏模式下，液态玻璃导航上移，给播放条让位 */
+:global([data-control-bar='bottom']) .dock {
+  bottom: 80px;
+}

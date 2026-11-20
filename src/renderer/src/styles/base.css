@@ -429,3 +429,9 @@ html[data-vt='1'] .albumBg {
 .amll-lyric-player .FmKaba_lyricLine.FmKaba_gradientMask {
   --bright-mask-alpha: var(--amll-word-bright, 1) !important;
 }
+
+
+/* 播放控制栏在底部时，滚动区底部留出高度（64 播放条 + 8 间隙） */
+[data-control-bar='bottom'] .contentScroll {
+  padding-bottom: 72px;
+}

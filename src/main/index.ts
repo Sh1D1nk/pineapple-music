@@ -248,10 +248,11 @@ app.whenReady().then(async () => {
 
   netMusic = new NetMusicBridge({
     token: () => settingsService?.get().netMusicToken || 'pinnet',
-    onSnapshot: (snapshot, heartbeat) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('netmusic/state', { snapshot, heartbeat })
-      }
+    onSnapshot: (snapshot) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('netmusic/state', { snapshot })
+    },
+    onHeartbeat: (heartbeat) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('netmusic/heartbeat', heartbeat)
     },
     onStatus: (status) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('netmusic/status', status)

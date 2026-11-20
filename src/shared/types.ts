@@ -168,6 +168,8 @@ export interface AppSettings {
   closeBehavior: 'ask' | 'background' | 'quit';
   /** 汽水音乐插件连接 Pinnet 本地桥用的 token */
   netMusicToken: string;
+  /** 播放控制栏位置：顶栏（现状）/ 传统底栏 */
+  controlBar: 'top' | 'bottom';
   glass: 'full' | 'lite' | 'off';
   sidebarWidth: number;
   lyricsPriority: ('sidecar' | 'embedded' | 'text')[];
@@ -239,6 +241,7 @@ export interface AppSettings {
 export const DEFAULT_SETTINGS: AppSettings = {
   closeBehavior: 'ask',
   netMusicToken: 'pinnet',
+  controlBar: 'top',
   theme: 'system',
   glass: 'full',
   sidebarWidth: 248,

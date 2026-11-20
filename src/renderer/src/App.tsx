@@ -330,8 +330,8 @@ export function App(): JSX.Element {
 
   return (
     <GlassProvider mode={settings.glass}>
-      <div className="app">
-        <div className="contentLayer">
+      <div className="app" data-control-bar={settings.controlBar}>
+        <div className={`contentLayer ${settings.controlBar === 'bottom' ? 'withBottomBar' : ''}`}>
           <div className="scrollEdgeTop" />
           <div id="contentScroll" className={`contentScroll ${queueOpen ? 'withQueue' : ''}`}>
             <div key={viewKey} className={`viewSwap ${navClass(navDirection)}`} data-nav-dir={navDirection}>
@@ -342,7 +342,7 @@ export function App(): JSX.Element {
 
         <div className="floatLayer">
           {settings.theme === 'liquid' ? <BottomBar /> : <Sidebar />}
-          <TopBar />
+          <TopBar variant={settings.controlBar === 'bottom' ? 'bottom' : 'top'} />
           <QueuePanel />
           <LyricsPanel />
           <CoverFlow
