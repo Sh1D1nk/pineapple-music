@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type JSX } from 'react'
+import { createContext, useCallback, useContext, useRef, useState, type JSX } from 'react'
 import { Icon } from './Icon'
 import { Cover } from './Cover'
 import { useStore } from '../state/store'
@@ -8,18 +8,72 @@ import { useAutoMix } from '../audio/automix'
 import { formatRemaining, formatTime } from '../lib/format'
 import styles from './TopBar.module.css'
 
+/**
+ * 控制目标：默认是 Pinnet 本地播放；在「网络音乐」页且插件已连接时切到汽水音乐。
+ * 所有子组件都通过这个 hook 取状态和动作，避免每个按钮各写一套分支。
+ */
+const RemoteContext = createContext(false)
+
+function useTarget(): {
+  isRemote: boolean
+  playing: boolean
+  position: number
+  duration: number
+  volume: number
+  muted: boolean
+  hasTrack: boolean
+  toggle: () => void
+  next: () => void
+  prev: () => void
+  seek: (sec: number) => void
+  setVolume: (v: number) => void
+  toggleMute: () => void
+} {
+  const remoteFlag = useContext(RemoteContext)
+  const connected = useStore((s) => s.netStatus.connected)
+  const net = useStore((s) => s.netMusic)
+  const playback = useStore((s) => s.playback)
+  const isRemote = remoteFlag && connected
+  const send = (cmd: unknown): void => {
+    void window.lm.invoke('netmusic/command', cmd)
+  }
+  const live = net.playing ? net.basePositionMs + (performance.now() - net.baseAt) : net.basePositionMs
+  return {
+    isRemote,
+    playing: isRemote ? net.playing : playback.playing,
+    position: isRemote ? live / 1000 : playback.position,
+    duration: isRemote ? net.durationMs / 1000 : playback.duration,
+    volume: isRemote ? net.volume : playback.volume,
+    muted: isRemote ? net.muted : playback.muted,
+    hasTrack: isRemote ? Boolean(net.track) : playback.queue.length > 0,
+    toggle: () => (isRemote ? send({ type: 'toggle' }) : useStore.getState().togglePlay()),
+    next: () => (isRemote ? send({ type: 'next' }) : useStore.getState().next()),
+    prev: () => (isRemote ? send({ type: 'prev' }) : useStore.getState().prev()),
+    seek: (sec) => (isRemote ? send({ type: 'seek', value: sec * 1000 }) : useStore.getState().seek(sec)),
+    setVolume: (v) => (isRemote ? send({ type: 'volume', value: v }) : useStore.getState().setVolume(v)),
+    toggleMute: () =>
+      isRemote
+        ? send({ type: 'volume', value: net.muted ? 1 : 0 })
+        : useStore.getState().toggleMute()
+  }
+}
+
 function TransportGroup(): JSX.Element {
-  const playing = useStore((s) => s.playback.playing)
+  const target = useTarget()
+  const playing = target.playing
   const shuffle = useStore((s) => s.playback.shuffle)
   const repeat = useStore((s) => s.playback.repeat)
-  const togglePlay = useStore((s) => s.togglePlay)
-  const next = useStore((s) => s.next)
-  const prev = useStore((s) => s.prev)
+  const togglePlay = target.toggle
+  const next = target.next
+  const prev = target.prev
   const toggleShuffle = useStore((s) => s.toggleShuffle)
   const cycleRepeat = useStore((s) => s.cycleRepeat)
+  // 汽水没有稳定的「随机/循环」接口：远端模式下直接隐藏，不做假按钮
+  const remote = target.isRemote
 
   return (
     <div className={`glass glassFull ${styles.group}`}>
+      {!remote && (
       <button
         type="button"
         className={`${styles.iconButton} ${shuffle ? styles.on : ''}`}
@@ -29,6 +83,7 @@ function TransportGroup(): JSX.Element {
       >
         <Icon name="shuffle" size={16} />
       </button>
+      )}
       <button type="button" className={styles.iconButton} onClick={prev} title="上一首 (Ctrl+←)">
         <Icon name="prev" size={20} />
       </button>
@@ -58,10 +113,11 @@ function TransportGroup(): JSX.Element {
 }
 
 function VolumeGroup(): JSX.Element {
-  const volume = useStore((s) => s.playback.volume)
-  const muted = useStore((s) => s.playback.muted)
-  const setVolume = useStore((s) => s.setVolume)
-  const toggleMute = useStore((s) => s.toggleMute)
+  const target = useTarget()
+  const volume = target.volume
+  const muted = target.muted
+  const setVolume = target.setVolume
+  const toggleMute = target.toggleMute
   const trackRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
 
@@ -128,16 +184,31 @@ function NowPlayingPill(): JSX.Element {
   const queue = useStore((s) => s.playback.queue)
   const index = useStore((s) => s.playback.index)
   const songs = useStore((s) => s.songs)
-  const position = useStore((s) => s.playback.position)
-  const duration = useStore((s) => s.playback.duration)
-  const seek = useStore((s) => s.seek)
+  const target = useTarget()
+  const net = useStore((s) => s.netMusic)
+  const position = target.position
+  const duration = target.duration
+  const seek = target.seek
   const setFullscreen = useStore((s) => s.setFullscreen)
   const setView = useStore((s) => s.setView)
   const automix = useAutoMix((s) => s.status)
   const automixLevel = useAutoMix((s) => s.level)
 
   const item = queue[index]
-  const song = item ? songs[item.songId] : undefined
+  const localSong = item ? songs[item.songId] : undefined
+  // 远端模式：把汽水的曲目包装成同一形状，复用封面/标题/歌手的渲染
+  const remoteSong = target.isRemote && net.track
+    ? ({
+        id: net.track.id,
+        title: net.track.title,
+        artists: net.track.artists ? net.track.artists.split(' / ') : [],
+        coverId: null,
+        albumKey: '',
+        durationSec: net.durationMs / 1000
+      } as unknown as (typeof localSong))
+    : undefined
+  const song = target.isRemote ? remoteSong : localSong
+  const remoteCover = target.isRemote ? net.track?.coverUrl ?? null : null
   const [hovering, setHovering] = useState(false)
   const [dragging, setDragging] = useState(false)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -195,7 +266,11 @@ function NowPlayingPill(): JSX.Element {
             }}
             title="打开全屏正在播放"
           >
-            <Cover coverId={song.coverId} size={80} display={34} radius={8} alt={song.title} />
+            {remoteCover ? (
+              <img className={styles.remoteCover} src={remoteCover} alt="" draggable={false} referrerPolicy="no-referrer" />
+            ) : (
+              <Cover coverId={song.coverId} size={80} display={34} radius={8} alt={song.title} />
+            )}
             <span className={styles.coverOverlay}>
               <Icon name="expand" size={16} />
             </span>
@@ -325,7 +400,11 @@ function PanelGroup(): JSX.Element {
 
 export function TopBar({ variant = 'top' }: { variant?: 'top' | 'bottom' }): JSX.Element {
   const settings = useStore((s) => s.settings)
+  const viewKind = useStore((s) => s.view.kind)
+  // 在「网络音乐」页里，这条控制栏整体切到汽水音乐
+  const remote = viewKind === 'netmusic'
   return (
+    <RemoteContext.Provider value={remote}>
     <div
       className={`${styles.bar} ${variant === 'bottom' ? styles.barBottom : ''}`}
       style={
@@ -350,5 +429,6 @@ export function TopBar({ variant = 'top' }: { variant?: 'top' | 'bottom' }): JSX
         <PanelGroup />
       </div>
     </div>
+    </RemoteContext.Provider>
   )
 }

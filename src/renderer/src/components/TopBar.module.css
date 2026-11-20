@@ -461,3 +461,13 @@
     0 -12px 32px rgba(0, 0, 0, 0.22);
   z-index: 45;
 }
+
+
+/* 远端（汽水）封面：和本地 Cover 同样的 34px 圆角方块 */
+.remoteCover {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+  display: block;
+}
