@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from 'react'
 import { BackgroundRender, type BackgroundRenderRef } from '@applemusic-like-lyrics/react'
 import { useStore, useCurrentSongId } from '../state/store'
+import type { SongMeta } from '@shared/types'
 import { bridge, coverUrl } from '../bridge'
 import { Cover } from './Cover'
 import { Icon } from './Icon'
@@ -41,6 +42,16 @@ export function FullscreenPlayer(): JSX.Element {
   const shuffle = useStore((s) => s.playback.shuffle)
   const repeat = useStore((s) => s.playback.repeat)
 
+  /* ---- 远端模式：在「网络音乐」页打开全屏歌词时，数据与控制都切到汽水 ---- */
+  const viewKind = useStore((s) => s.view.kind)
+  const net = useStore((s) => s.netMusic)
+  const netConnected = useStore((s) => s.netStatus.connected)
+  const remote = viewKind === 'netmusic' && netConnected
+  const send = useCallback((cmd: unknown) => {
+    void window.lm.invoke('netmusic/command', cmd)
+  }, [])
+  const liveMs = net.playing ? net.basePositionMs + (performance.now() - net.baseAt) : net.basePositionMs
+
   const [mounted, setMounted] = useState(open)
   /** 上一首/下一首/播放的按压动画（对齐插件的 saPushL/R/C） */
   const [push, setPush] = useState<'l' | 'r' | 'c' | null>(null)
@@ -57,8 +68,21 @@ export function FullscreenPlayer(): JSX.Element {
     return () => window.clearTimeout(timer)
   }, [open])
 
-  const song = songs[playback.queue[playback.index]?.songId ?? '']
-  const albumArt = coverUrl(song?.coverId ?? null, 640)
+  const localSong = songs[playback.queue[playback.index]?.songId ?? '']
+  const remoteSong = remote && net.track
+    ? ({
+        id: 'net-' + net.track.id,
+        title: net.track.title,
+        artists: net.track.artists ? net.track.artists.split(' / ') : [],
+        coverId: null,
+        albumKey: '',
+        durationSec: net.durationMs / 1000
+      } as unknown as SongMeta)
+    : undefined
+  const song = remote ? remoteSong : localSong
+  const albumArt = remote
+    ? net.track?.coverUrl ?? null
+    : coverUrl(song?.coverId ?? null, 640)
   const trackRef = useRef<HTMLDivElement>(null)
 
   /** 流体背景实例：切歌时要直接改它的流速，做出「搅动水面」再慢慢平静的效果 */
@@ -79,8 +103,22 @@ export function FullscreenPlayer(): JSX.Element {
   // 歌词归属校验：store.lyrics 是异步加载的，切歌瞬间它还是上一首的载荷。
   // 不校验 songId 就会出现「标题是 B、歌词滚的是 A」的错位 —— 等新歌词到位再显示。
   const currentSongId = useCurrentSongId()
-  const lyricsForCurrent =
-    lyrics && currentSongId && lyrics.songId === currentSongId ? lyrics : null
+  const remoteLyrics = remote
+    ? {
+        songId: 'net-' + (net.track?.id ?? ''),
+        kind: 'synced' as const,
+        lines: net.lyrics.map((l) => ({
+          ...l,
+          translatedLyric: l.translatedLyric ?? '',
+          romanLyric: l.romanLyric ?? ''
+        }))
+      }
+    : null
+  const lyricsForCurrent = remote
+    ? remoteLyrics
+    : lyrics && currentSongId && lyrics.songId === currentSongId
+      ? lyrics
+      : null
 
   // 「接下来播放」：队列下一首 + 它的歌词信息（首行预览与行数）。
   // 随机推荐会打开全屏页，这张卡片就是「下一首歌词信息」的展示位。
@@ -94,8 +132,8 @@ export function FullscreenPlayer(): JSX.Element {
   }, [lyricsForCurrent, settings.showTranslation, settings.showRoman])
 
   const hasLyrics = lines.length > 0
-  const position = playback.position
-  const duration = playback.duration || song?.durationSec || 0
+  const position = remote ? liveMs / 1000 : playback.position
+  const duration = remote ? net.durationMs / 1000 : playback.duration || song?.durationSec || 0
   const percent = duration > 0 ? Math.min(100, (position / duration) * 100) : 0
   // 与插件 applyFontScale() 同一条公式：max(max(5vh, 2.5vw), 12px) × 倍数
   const lyricFontSize = Math.round(
@@ -296,11 +334,15 @@ export function FullscreenPlayer(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fsRandomHint, nextSong?.id, open])
 
+  const seekToSec = (sec: number): void => {
+    if (remote) send({ type: 'seek', value: sec * 1000 })
+    else seek(sec)
+  }
   const seekFrom = (clientX: number): void => {
     const el = trackRef.current
     if (!el || duration <= 0) return
     const rect = el.getBoundingClientRect()
-    seek(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * duration)
+    seekToSec(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * duration)
   }
 
   // 与插件 aqFactors() 同一张阶梯：档位只乘在用户设定值上，不会把「静态」解冻，
@@ -516,6 +558,7 @@ export function FullscreenPlayer(): JSX.Element {
               </div>
 
               <div className={styles.fsControls}>
+                {!remote && (
                 <button
                   type="button"
                   className={`${styles.fsMode} ${shuffle ? styles.fsModeOn : ''}`}
@@ -524,12 +567,13 @@ export function FullscreenPlayer(): JSX.Element {
                 >
                   <Icon name="shuffle" size={20} />
                 </button>
+                )}
                 <button
                   type="button"
                   className={`${styles.fsPrev} ${push === 'l' ? styles.fsPushL : ''}`}
                   onClick={() => {
                     pulse('l')
-                    prev()
+                    remote ? send({ type: 'prev' }) : prev()
                   }}
                   title="上一首"
                 >
@@ -540,7 +584,8 @@ export function FullscreenPlayer(): JSX.Element {
                   className={`${styles.fsPlay} ${push === 'c' ? styles.fsPushC : ''}`}
                   onClick={() => {
                     pulse('c')
-                    togglePlay()
+                    if (remote) send({ type: 'toggle' })
+                    else togglePlay()
                   }}
                   title="播放 / 暂停"
                 >
@@ -551,7 +596,7 @@ export function FullscreenPlayer(): JSX.Element {
                   className={`${styles.fsNext} ${push === 'r' ? styles.fsPushR : ''}`}
                   onClick={() => {
                     pulse('r')
-                    next()
+                    remote ? send({ type: 'next' }) : next()
                   }}
                   title="下一首"
                 >
@@ -571,7 +616,10 @@ export function FullscreenPlayer(): JSX.Element {
                 <button
                   type="button"
                   className={styles.fsVicon}
-                  onClick={toggleMute}
+                  onClick={() => {
+                    if (remote) send({ type: 'volume', value: net.muted ? 1 : 0 })
+                    else toggleMute()
+                  }}
                   title={playback.muted || playback.volume <= 0.001 ? '取消静音' : '静音'}
                 >
                   <Icon
@@ -589,16 +637,17 @@ export function FullscreenPlayer(): JSX.Element {
                   onPointerMove={(event) => {
                     if (event.buttons !== 1) return
                     const rect = event.currentTarget.getBoundingClientRect()
-                    setVolume(Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)))
+                    if (remote) send({ type: 'volume', value: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) })
+                    else setVolume(Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)))
                   }}
                   role="slider"
                   aria-label="音量"
                   aria-valuemin={0}
                   aria-valuemax={100}
-                  aria-valuenow={Math.round(playback.volume * 100)}
+                  aria-valuenow={Math.round((remote ? net.volume : playback.volume) * 100)}
                   tabIndex={0}
                 >
-                  <div className={styles.fsVolumeFill} style={{ width: `${playback.volume * 100}%` }} />
+                  <div className={styles.fsVolumeFill} style={{ width: `${(remote ? net.volume : playback.volume) * 100}%` }} />
                 </div>
                 <Icon name="volumeHigh" size={16} className={styles.fsVicon} />
               </div>
@@ -630,7 +679,7 @@ export function FullscreenPlayer(): JSX.Element {
           >
             <LyricsView
               lines={lines}
-              playing={playback.playing}
+              playing={remote ? net.playing : playback.playing}
               offsetMs={settings.lyricOffsetMs}
               fontSize={lyricFontSize}
               weight={settings.lyricWeight}
@@ -647,7 +696,7 @@ export function FullscreenPlayer(): JSX.Element {
               }
               alignAnchor="center"
               alignPosition={0.5}
-              onSeek={(seconds) => seek(seconds)}
+              onSeek={(seconds) => seekToSec(seconds)}
               color="rgba(255,255,255,.96)"
             />
             {!hasLyrics && (

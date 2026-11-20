@@ -33,6 +33,9 @@ export class NetMusicBridge {
   private pluginVersion: string | null = null
   private lastError: string | null = null
   private snapshot: NetSnapshot | null = null
+  /** 绑定失败（EADDRINUSE：上一个实例的 TIME_WAIT 还没释放）时的重试 */
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private startAttempts = 0
 
   constructor(private readonly opts: BridgeOptions) {}
 
@@ -55,15 +58,21 @@ export class NetMusicBridge {
     } catch (err) {
       this.lastError = err instanceof Error ? err.message : String(err)
       this.emitStatus()
+      this.scheduleRetry()
       return
     }
     this.server.on('listening', () => {
+      this.startAttempts = 0
       this.lastError = null
       this.emitStatus()
     })
     this.server.on('error', (err: Error) => {
       this.lastError = err.message
       this.emitStatus()
+      // TIME_WAIT / 端口被占：退避重试，直到绑上（Windows 上重启后要等 2 分钟才释放）
+      this.server?.close()
+      this.server = null
+      this.scheduleRetry()
     })
     this.server.on('connection', (socket, request) => {
       const url = new URL(request.url ?? '/', `http://127.0.0.1:${port}`)
@@ -100,10 +109,24 @@ export class NetMusicBridge {
   }
 
   stop(): void {
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = null
+    }
     this.client?.close()
     this.client = null
     this.server?.close()
     this.server = null
+  }
+
+  private scheduleRetry(): void {
+    if (this.retryTimer || this.startAttempts >= 30) return
+    this.startAttempts++
+    const delay = Math.min(8000, 1000 * this.startAttempts)
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      this.start()
+    }, delay)
   }
 
   /** 渲染进程发来的控制指令 → 插件 */

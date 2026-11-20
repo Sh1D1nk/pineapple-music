@@ -341,7 +341,6 @@ export function App(): JSX.Element {
         </div>
 
         <div className="floatLayer">
-          {view.kind === 'netmusic' && <NetMusicView />}
           {settings.theme === 'liquid' ? <BottomBar /> : <Sidebar />}
           <TopBar variant={settings.controlBar === 'bottom' ? 'bottom' : 'top'} />
           <QueuePanel />

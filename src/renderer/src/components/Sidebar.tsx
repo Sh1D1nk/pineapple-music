@@ -27,6 +27,7 @@ export function Sidebar(): JSX.Element {
   const playRandom = useStore((s) => s.playRandom)
   const pushToast = useStore((s) => s.pushToast)
   const netConnected = useStore((s) => s.netStatus.connected)
+  const setFullscreen = useStore((s) => s.setFullscreen)
   // 汽水音乐插件连上时才出现；断开就消失，PM 回到纯本地
   const navItems = netConnected
     ? [...NAV, { key: 'netmusic' as const, label: '网络音乐', icon: 'waveform' as IconName }]
@@ -148,6 +149,13 @@ export function Sidebar(): JSX.Element {
               className={`${styles.item} ${active ? styles.activeItem : ''}`}
               onClick={() => {
                 setQuery('')
+                if (entry.key === 'netmusic') {
+                  // 进入汽水模式：先停本地播放，避免两边同时出声
+                  if (useStore.getState().playback.playing) useStore.getState().togglePlay()
+                  setView({ kind: 'netmusic' })
+                  setFullscreen(true)
+                  return
+                }
                 setView({ kind: entry.key } as never)
               }}
             >
