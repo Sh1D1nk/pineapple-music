@@ -21,7 +21,7 @@ Electron + electron-vite + React 19 + TypeScript(strict) + Zustand，界面语�
 ```bash
 npm install            # 依赖安装（.npmrc 已预设 legacy-peer-deps 与 electron 镜像）
 npm run dev            # 开发模式，直接打开应用窗口
-npm run build          # 产出 Windows 安装包 dist/Pinnet-<版本>-setup.exe（当前 1.3.4）
+npm run build          # 产出 Windows 安装包 dist/Pinnet-<版本>-setup.exe（当前 1.7.0）
 ```
 
 其它脚本：
