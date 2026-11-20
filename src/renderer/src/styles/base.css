@@ -127,8 +127,9 @@ a {
 .glass {
   position: relative;
   background: var(--glass-tint);
-  backdrop-filter: var(--hyalite, blur(18px) saturate(1.45));
-  -webkit-backdrop-filter: var(--hyalite, blur(18px) saturate(1.45));
+  /* 配方顺序：饱和度在前，位移滤镜在后（Hyalite 只写 --hyalite，兜底为 4px 模糊） */
+  backdrop-filter: saturate(1.5) var(--hyalite, blur(4px));
+  -webkit-backdrop-filter: saturate(1.5) var(--hyalite, blur(4px));
   box-shadow:
     var(--glass-shadow),
     var(--hyalite-edge, none),
@@ -136,9 +137,16 @@ a {
   border-radius: var(--radius-panel);
 }
 
-[data-glass='lite'] .glass {
+/* 大面板一律磨砂：只给小表面挂真实折射（见 GlassProvider） */
+.glassLite {
   backdrop-filter: blur(22px) saturate(1.7);
   -webkit-backdrop-filter: blur(22px) saturate(1.7);
+}
+
+[data-glass='lite'] .glass,
+html[data-perf='low'] .glassFull {
+  backdrop-filter: blur(22px) saturate(1.6);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
 }
 
 [data-glass='off'] .glass {
@@ -434,4 +442,54 @@ html[data-vt='1'] .albumBg {
 /* 播放控制栏在底部时，滚动区底部留出高度（64 播放条 + 8 间隙） */
 [data-control-bar='bottom'] .contentScroll {
   padding-bottom: 72px;
+}
+
+/* ---------------------------------------------------------------- 页面保活 */
+
+/* 缓存下来的页面留在 DOM 里（封面解码、列表虚拟化状态、滚动位置都不丢）。
+   隐藏方式很关键：display:none 会丢弃渲染层，切回时要整页重新栅格化
+   （实测专辑页 188ms、艺人页 133ms）；改成「绝对定位 + visibility:hidden」
+   之后保留布局与图层，切回只要 62ms / 44ms。 */
+.viewPaneStack {
+  position: relative;
+}
+
+.viewPaneHidden {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.viewPaneActive {
+  position: relative;
+}
+
+/* 悬浮玻璃播放底栏：内容底部留出 96px，最后一张卡片不会被胶囊压住 */
+[data-control-bar='float'] .contentScroll {
+  padding-bottom: 96px;
+}
+
+/* 传统底栏：实色通栏贴底，内容让出高度 */
+[data-control-bar='bottom'] .contentScroll {
+  padding-bottom: 92px;
+}
+
+
+/* ---------------------------------------------------------------- GPU 预热 */
+
+/* 4×4 的常驻磨砂：只为让 Chromium 在启动时编译 backdrop-filter 的着色器。
+   没有它，第一次打开「歌曲信息」这类带全屏遮罩的浮层，冷启动要多 400ms。 */
+.blurWarm {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 4px;
+  height: 4px;
+  opacity: 0.01;
+  pointer-events: none;
+  z-index: 0;
+  backdrop-filter: blur(6px) saturate(1.4);
+  -webkit-backdrop-filter: blur(6px) saturate(1.4);
+  filter: blur(1px);
 }

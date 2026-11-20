@@ -1,0 +1,104 @@
+/* HUD 不用 backdrop-filter：它自己是性能面板，不能在测量时引入额外合成开销。 */
+.hud {
+  position: fixed;
+  right: 12px;
+  top: 56px;
+  width: 344px;
+  max-height: calc(100vh - 140px);
+  overflow: auto;
+  z-index: 200;
+  padding: 10px 12px 12px;
+  border-radius: 12px;
+  background: rgba(12, 12, 14, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  color: #e8e8ea;
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  pointer-events: auto;
+  user-select: text;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-bottom: 6px;
+  color: #fff;
+}
+
+.hint {
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 10px;
+}
+
+.section {
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.row b {
+  font-weight: 600;
+  color: #fff;
+}
+
+.mono {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 10.5px;
+  white-space: pre-wrap;
+}
+
+.spark {
+  color: rgba(120, 220, 170, 0.55);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+  font-size: 10.5px;
+}
+
+.table th {
+  text-align: left;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.42);
+  padding: 2px 3px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.table td {
+  padding: 2px 3px;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+}
+
+.ellipsis {
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dim {
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+}
+
+.good {
+  color: #75e0a7;
+}
+
+.bad {
+  color: #ff7b82;
+}

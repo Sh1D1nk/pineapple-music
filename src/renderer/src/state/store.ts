@@ -15,6 +15,8 @@ import type { NetLyricLine, NetStatus, NetTrack } from '@shared/netmusic'
 import { bridge } from '../bridge'
 import { nextQueueIndex, prevQueueIndex } from '../lib/queueNav'
 import { engine, type EngineSnapshot } from '../audio/engine'
+import { beginAudio, beginOpen, endAudio, phase } from '../perf/core'
+import { viewOpenKey } from '../perf/keys'
 
 export type View =
   | { kind: 'recent' }
@@ -27,10 +29,25 @@ export type View =
   | { kind: 'search' }
   | { kind: 'settings' }
   | { kind: 'lab' }
+  | { kind: 'glasslab' }
   | { kind: 'netmusic' }
 
-export interface NetMusicState {
-  track: NetTrack | null
+const VIEW_LABEL: Record<View['kind'], string> = {
+  recent: '最近添加',
+  songs: '歌曲',
+  albums: '专辑',
+  artists: '艺人',
+  favorites: '收藏',
+  album: '专辑详情',
+  artist: '艺人详情',
+  search: '搜索',
+  settings: '设置',
+  lab: 'Transition Lab',
+  glasslab: '玻璃实验室',
+  netmusic: '网络音乐'
+}
+
+export interface NetMusicState {  track: NetTrack | null
   lyrics: NetLyricLine[]
   playing: boolean
   basePositionMs: number
@@ -113,6 +130,8 @@ interface StoreState {
   lyricsQualityLevel: number
   toasts: Toast[]
   dragActive: boolean
+  /** 性能守护实测掉帧后的降级开关（auto 模式）：玻璃简化 + 歌词模糊关 + 背景降采样 */
+  perfLow: boolean
   playback: PlaybackState
   lyrics: LyricsPayload | null
   lyricsLoading: boolean
@@ -134,6 +153,7 @@ interface StoreState {
   setLyricsSettingsOpen: (open: boolean) => void
   setLyricsQualityLevel: (level: number) => void
   setDragActive: (active: boolean) => void
+  setPerfLow: (low: boolean) => void
   setNetMusic: (patch: Partial<NetMusicState>) => void
   setNetStatus: (status: NetStatus) => void
   pushToast: (text: string) => void
@@ -254,6 +274,7 @@ export const useStore = create<StoreState>((set, get) => {
   const syncEngine = (snapshot: EngineSnapshot): void => {
     const state = get()
     const cp = state.playback
+    const wasPlaying = cp.playing
     const songId = snapshot.songId
     let queue = cp.queue
     let index = cp.index
@@ -273,6 +294,7 @@ export const useStore = create<StoreState>((set, get) => {
         muted: snapshot.muted
       }
     })
+    if (!wasPlaying && snapshot.playing) endAudio('')
     persist(get())
   }
 
@@ -304,6 +326,7 @@ export const useStore = create<StoreState>((set, get) => {
     lyricsQualityLevel: 0,
     toasts: [],
     dragActive: false,
+    perfLow: false,
     lyrics: null,
     lyricsLoading: false,
     netMusic: {
@@ -436,6 +459,8 @@ export const useStore = create<StoreState>((set, get) => {
         current.kind === view.kind &&
         JSON.stringify(current) === JSON.stringify(view)
       if (same) return
+      // 性能打点：从「按下」到这一帧渲染完成的测量从这里开始（结束在 App 的双 rAF 里）
+      beginOpen(viewOpenKey(view), VIEW_LABEL[view.kind] ?? view.kind)
       // 主导航（最近添加/艺人/专辑/歌曲/收藏）的高低决定内容进出方向，做成「向上/向下滚过」的观感
       // 设置与详情页也要有横向位置，否则从它们切出去时方向会是 none（没有过渡）
       const order = (v: View): number =>
@@ -460,6 +485,8 @@ export const useStore = create<StoreState>((set, get) => {
       const history = options?.silent ? get().viewHistory : [...get().viewHistory, current].slice(-24)
       set({ view, viewHistory: history, navDirection })
       persist(get())
+      // setView 里的同步工作到此结束；提交与首帧由 App 的 layout effect / 双 rAF 记录
+      phase('sync')
     },
 
     goBack() {
@@ -489,9 +516,11 @@ export const useStore = create<StoreState>((set, get) => {
       persist(get())
     },
     setQueueOpen(open) {
+      if (open) beginOpen('panel:queue', '待播清单')
       set(open ? { queueOpen: true, lyricsOpen: false } : { queueOpen: false })
     },
     setLyricsOpen(open) {
+      if (open) beginOpen('panel:lyrics', '歌词面板')
       // 侧边歌词面板与全屏歌词页是两种互斥形态：面板活在 floatLayer（z-index 5），
       // 全屏页在 overlayLayer（z-index 40）之上，两者同时打开只会让面板被整页盖住。
       // 开一个必关另一个，才不会出现「点了歌词按钮却什么都没发生」。
@@ -502,6 +531,7 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     setFullscreen(open) {
+      if (open) beginOpen('fullscreen', '全屏正在播放')
       // 只做应用内全屏：切换系统全屏会把窗口状态搅乱（尤其在最大化时），
       // 真正的系统全屏留给 F11。全屏页与侧边面板互斥，理由见 setLyricsOpen。
       // 退出歌词页时顺手收掉页内菜单与设置窗 —— 否则它们会孤零零地浮在别的页面上。
@@ -521,13 +551,19 @@ export const useStore = create<StoreState>((set, get) => {
       set({ lyricsQualityLevel: level })
     },
     setInfoSongId(id) {
+      if (id) beginOpen('dialog:info', '歌曲信息')
       set({ infoSongId: id })
     },
     setContextMenu(menu) {
+      if (menu) beginOpen('menu:context', '右键菜单')
       set({ contextMenu: menu })
     },
     setDragActive(active) {
       set({ dragActive: active })
+    },
+    setPerfLow(low) {
+      if (get().perfLow === low) return
+      set({ perfLow: low })
     },
     setNetMusic(patch) {
       set((state) => ({ netMusic: { ...state.netMusic, ...patch } }))
@@ -563,6 +599,7 @@ export const useStore = create<StoreState>((set, get) => {
       set({ playback: { ...get().playback, queue: items, index, history: [] } })
       const song = get().songs[items[index]!.songId]
       if (song) {
+        beginAudio('play')
         void engine.load(song, { autoplay: true, position: 0 })
       }
       void bridge.orderAnalysis(ids)
@@ -610,10 +647,12 @@ export const useStore = create<StoreState>((set, get) => {
     },
 
     togglePlay() {
+      beginAudio('toggle')
       void engine.toggle()
     },
 
     next(auto = false) {
+      if (!auto) beginAudio('next')
       const state = get()
       const { queue, index, repeat, shuffle } = state.playback
       if (queue.length === 0) return

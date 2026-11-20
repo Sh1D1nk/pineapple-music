@@ -412,14 +412,40 @@ export function SettingsView(): JSX.Element {
             onChange={(closeBehavior) => void update({ closeBehavior })}
           />
         </Row>
-        <Row label="播放控制栏" hint="「传统底栏」把播放/进度/音量搬到窗口底部（液态玻璃导航会自动上移让位）">
+        <Row label="播放控制位置" hint="悬浮玻璃底栏：封面/歌名/上一首/播放/下一首/进度 + 歌词与待播圆按钮；传统底栏是实色通栏；顶栏是旧布局">
           <Segmented
             value={settings.controlBar}
             options={[
-              { value: 'top', label: '顶栏' },
-              { value: 'bottom', label: '传统底栏' }
+              { value: 'float', label: '悬浮玻璃底栏' },
+              { value: 'bottom', label: '传统底栏' },
+              { value: 'top', label: '顶栏' }
             ]}
             onChange={(controlBar) => void update({ controlBar })}
+          />
+        </Row>
+        <Row label="页面转场动画" hint="开：点专辑/艺人时封面形变 + 整页交叉淡入（原生 View Transition，集显上约 80ms 快照成本）；关：点开即出">
+          <Switch value={settings.pageTransition} onChange={(pageTransition) => void update({ pageTransition })} />
+        </Row>
+        <Row label="性能模式" hint="自动：按实测帧耗时在玻璃/歌词模糊/背景采样之间降级；开：强制省电档（含关闭页面转场）；关：全开">
+          <Segmented
+            value={settings.performanceMode}
+            options={[
+              { value: 'auto', label: '自动' },
+              { value: 'on', label: '开' },
+              { value: 'off', label: '关' }
+            ]}
+            onChange={(performanceMode) => void update({ performanceMode })}
+          />
+        </Row>
+        <Row label="后台处理" hint="「空闲时」= 最近 1.5 秒没有鼠标/键盘/滚动输入才跑分析或分轨；有输入立即停在歌与歌之间">
+          <Segmented
+            value={settings.backgroundProcessing}
+            options={[
+              { value: 'idle', label: '空闲时' },
+              { value: 'always', label: '始终' },
+              { value: 'off', label: '关闭' }
+            ]}
+            onChange={(backgroundProcessing) => void update({ backgroundProcessing })}
           />
         </Row>
         <Row
@@ -442,6 +468,15 @@ export function SettingsView(): JSX.Element {
               void update({ glass: value })
             }}
           />
+        </Row>
+        <Row label="玻璃实验室" hint="高对比背景 + 5 个玻璃样例，可逐个切换完整折射/简化/关闭并测帧耗时（Ctrl+Shift+G）">
+          <button
+            type="button"
+            className={styles.labButton}
+            onClick={() => useStore.getState().setView({ kind: 'glasslab' })}
+          >
+            打开玻璃实验室
+          </button>
         </Row>
       </section>
 
@@ -710,7 +745,7 @@ export function SettingsView(): JSX.Element {
             onChange={(value) => void update({ bgSaturate: value })}
           />
         </Row>
-        <Row label="性能模式" hint="降低背景分辨率与帧率，并关闭歌词模糊与缩放">
+        <Row label="背景省电（仅背景）" hint="降低背景分辨率与帧率，并关闭歌词模糊与缩放">
           <Switch value={settings.bgPerf} onChange={(value) => void update({ bgPerf: value })} />
         </Row>
         <Row label="自适应画质" hint="帧率偏低时自动下调背景渲染精度，帧率恢复后缓慢回升">

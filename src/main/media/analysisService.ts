@@ -6,6 +6,7 @@ import type { AnalysisProgress, AnalysisResult, SongMeta } from '@shared/types'
 import type { AnalyzeOk, AnalyzeRequest, AnalyzeResponse } from '../workers/analysis.worker'
 import { decodeMono, measureDynamics } from './ffmpeg'
 import { TaskQueue } from './taskQueue'
+import { waitForBackgroundTurn } from '../governor'
 import type { LibraryService } from '../library/scanner'
 
 const HEAD_WINDOW = 40
@@ -91,6 +92,8 @@ export class AnalysisService extends EventEmitter {
   }
 
   private async runTask(songId: string): Promise<void> {
+    // 用户一动手，后台就让路：单曲粒度（一首歌的解码+分析是一个整体，不做执行中抢占）
+    await waitForBackgroundTurn()
     const song = this.library.get(songId)
     if (!song) return
     if (song.analysis) return

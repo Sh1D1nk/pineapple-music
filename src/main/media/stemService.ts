@@ -5,6 +5,7 @@ import type { SongMeta, StemInfo } from '@shared/types'
 import { ffmpegPath } from './ffmpeg'
 import { modelExists, status as runtimeStatus } from './stemRuntime'
 import { stemsDir } from '../paths'
+import { waitForBackgroundTurn } from '../governor'
 import type { StemJobResult, StemWorkerMessage, StemWorkerRequest } from '../workers/stem.worker'
 
 export type StemStage = 'queued' | 'decode' | 'infer' | 'write' | 'done' | 'failed'
@@ -147,6 +148,8 @@ export class StemService {
     this.cancelled = false
     this.progress.queued = this.queue.length
     try {
+      // 分轨吃满 CPU/GPU：只在用户空闲时开工，且歌与歌之间可抢占
+      await waitForBackgroundTurn()
       await this.run(next)
     } finally {
       this.running = false

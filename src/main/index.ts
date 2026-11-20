@@ -13,6 +13,8 @@ import { windowStateFile } from './paths'
 import { TrayController } from './tray'
 import { NetMusicBridge } from './netMusic'
 import { askCloseBehavior, resolveCloseDecision, type CloseDecision } from './closeDialog'
+import { perfSnapshot, startPerfSampler, stopPerfSampler } from './perf'
+import { lowerProcessPriority, noteUserInput, setBackgroundMode } from './governor'
 
 interface WindowState {
   x?: number
@@ -81,6 +83,14 @@ function hideToTray(): void {
 
 // 必须在读取任何 app.getPath('userData') 之前改名，否则会落到旧目录
 app.setName('Pinnet')
+// 基准测试专用：把 userData 指到临时目录，避免污染真实曲库（bench --profile）
+if (process.env.PINNET_USER_DATA) {
+  try {
+    app.setPath('userData', process.env.PINNET_USER_DATA)
+  } catch {
+    /* ignore */
+  }
+}
 registerSchemes()
 
 const gotLock = app.requestSingleInstanceLock()
@@ -183,10 +193,16 @@ function createWindow(): BrowserWindow {
   })
 
   const devUrl = process.env['ELECTRON_RENDERER_URL']
+  // 性能对照：bench 用 PINNET_PERF_LEGACY=1 启动，同一份构建里走「上一版」路径
+  const perfLegacy = process.env.PINNET_PERF_LEGACY === '1'
+  const noKeepAlive = process.env.PINNET_PERF_NO_KEEPALIVE === '1'
+  const params: Record<string, string> | undefined = perfLegacy ? { perfLegacy: '1' } : noKeepAlive ? { perfNoKeepAlive: '1' } : undefined
+  const query = params ? { query: params } : undefined
   if (devUrl) {
-    void win.loadURL(devUrl)
+    const suffix = perfLegacy ? '?perfLegacy=1' : noKeepAlive ? '?perfNoKeepAlive=1' : ''
+    void win.loadURL(`${devUrl}${suffix}`)
   } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'))
+    void win.loadFile(join(__dirname, '../renderer/index.html'), query)
   }
 
   return win
@@ -194,8 +210,12 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(async () => {
   app.setAppUserModelId('com.pinnet.player')
+  // 后台任务全程低于正常优先级；用户一动手就停（见 governor）
+  lowerProcessPriority()
+  startPerfSampler()
 
   settingsService = new SettingsService()
+  setBackgroundMode(settingsService.get().backgroundProcessing ?? 'idle')
   const repo = openRepository()
   libraryService = new LibraryService(repo)
   const lyricsService = new LyricsService()
@@ -266,13 +286,16 @@ app.whenReady().then(async () => {
   })
 
   analysisService.start()
-  // Stage 1 analysis for everything already indexed, newest imports first.
-  const pending = libraryService
-    .snapshot()
-    .filter((s) => !s.analysis)
-    .sort((a, b) => b.addedAt - a.addedAt)
-    .map((s) => s.id)
-  if (pending.length > 0) analysisService.enqueueMany(pending, 3000)
+  // 性能基准：不自动分析全库（5400 首夹具会让 ffmpeg 把机器拖垮，测出来的数全是噪声）
+  if (process.env.PINNET_BENCH !== '1') {
+    // Stage 1 analysis for everything already indexed, newest imports first.
+    const pending = libraryService
+      .snapshot()
+      .filter((s) => !s.analysis)
+      .sort((a, b) => b.addedAt - a.addedAt)
+      .map((s) => s.id)
+    if (pending.length > 0) analysisService.enqueueMany(pending, 3000)
+  }
 
   registerMediaKeys()
 
@@ -281,6 +304,17 @@ app.whenReady().then(async () => {
     return { status: latest?.status ?? { listening: false, connected: false, pluginVersion: null, token: 'pinnet', port: 17891, lastError: null }, snapshot: latest?.snapshot ?? null }
   })
   ipcMain.handle('netmusic/command', (_e, command) => Boolean(netMusic?.command(command)))
+
+  /* ---- 性能 HUD 的主进程侧探针 ---- */
+  ipcMain.handle('perf/main', () => {
+    const stemProgress = stemService?.snapshot()
+    return perfSnapshot({
+      active: Boolean(stemProgress?.active),
+      stage: stemProgress?.stage ?? 'idle',
+      percent: stemProgress ? Math.round((stemProgress.percent ?? 0) * 100) : 0
+    })
+  })
+  ipcMain.on('perf/input', () => noteUserInput())
   ipcMain.on('overlay/close-decision', (_e, decision: CloseDecision) => resolveCloseDecision(decision))
   ipcMain.on('overlay/tray-command', (_e, command: string | { type: 'volume'; value: number }) =>
     trayController?.handleCommand(command)
@@ -378,6 +412,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   quitting = true
+  stopPerfSampler()
   netMusic?.stop()
   netMusic = null
   trayController?.destroy()

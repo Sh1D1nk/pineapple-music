@@ -3,10 +3,13 @@ import { useStore, useCurrentSongId, useIsPlaying } from '../state/store'
 import { albumsOf, artistsOf, albumsSorted, songsOfAlbum } from '../lib/group'
 import { Cover } from '../components/Cover'
 import { Icon } from '../components/Icon'
+import { VirtualList } from '../components/VirtualList'
 import { TrackTable } from '../components/TrackTable'
 import { formatCount } from '../lib/format'
 import { markMorph, withViewTransition } from '../lib/transition'
 import styles from '../components/views.module.css'
+import { phaseForKey } from '../perf/core'
+import { viewOpenKey } from '../perf/keys'
 
 export function ArtistsView(): JSX.Element {
   const songs = useStore((s) => s.songs)
@@ -26,13 +29,16 @@ export function ArtistsView(): JSX.Element {
           <p className="pageSubtitle">{formatCount(list.length)} 位艺人</p>
         </div>
       </div>
-      <div className={styles.artistList}>
-        {list.map((artist) => (
+      <VirtualList
+        items={list}
+        estimate={64}
+        gap={4}
+        renderItem={(artist) => (
           <button
-            key={artist.key}
             type="button"
             className={styles.artistRow}
             onClick={() => setView({ kind: 'artist', name: artist.name })}
+            style={{ width: '100%' }}
           >
             <div className={styles.avatar}>
               {artist.coverId ? (
@@ -48,8 +54,8 @@ export function ArtistsView(): JSX.Element {
               </div>
             </div>
           </button>
-        ))}
-      </div>
+        )}
+      />
     </div>
   )
 }
@@ -68,13 +74,16 @@ export function ArtistDetail({ name }: DetailProps): JSX.Element {
   const { albums, tracks } = useMemo(() => {
     const artist = artistsOf(songs, songIds).get(name)
     const albumMap = albumsOf(songs, songIds)
-    const albumList = artist
+    // 只排序这位艺人自己的专辑，而不是「整库排序后再过滤」
+    const artistAlbums = artist
       ? artist.albumKeys.map((key) => albumMap.get(key)).filter((a): a is NonNullable<typeof a> => Boolean(a))
       : []
     const own = artist ? artist.songIds.map((id) => songs[id]).filter((s): s is NonNullable<typeof s> => Boolean(s)) : []
     own.sort((a, b) => (b.analysis?.lufs ?? -99) - (a.analysis?.lufs ?? -99))
-    return { albums: albumsSorted(albumMap, 'recent').filter((a) => albumList.some((x) => x.key === a.key)), tracks: own }
+    return { albums: albumsSorted(new Map(artistAlbums.map((a) => [a.key, a])), 'recent'), tracks: own }
   }, [songIds, songs, name])
+
+  phaseForKey(viewOpenKey({ kind: 'artist', name }), 'data')
 
   const top = tracks.slice(0, 10)
   const current = useCurrentSongId()

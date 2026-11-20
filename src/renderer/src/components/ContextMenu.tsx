@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { useStore } from '../state/store'
+import { useOpenPaint } from '../perf/react'
 import { bridge } from '../bridge'
 import { songsOfAlbum, buildAlbums } from '../lib/group'
 import styles from './overlays.module.css'
@@ -42,6 +43,7 @@ export function ContextMenu(): JSX.Element | null {
     }
   }, [menu, setContextMenu])
 
+  useOpenPaint(Boolean(menu))
   if (!menu) return null
   const song = songs[menu.songId]
   if (!song) return null

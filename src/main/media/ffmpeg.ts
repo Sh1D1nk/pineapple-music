@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, sep } from 'node:path'
+import { lowerChildPriority } from '../governor'
 
 let cachedPath: string | null = null
 
@@ -59,6 +60,8 @@ export function runFfmpeg(args: string[], timeoutMs = 120_000): Promise<RunResul
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe']
     })
+    // 解码/测量是后台活：降到 BELOW_NORMAL，别和界面抢调度
+    lowerChildPriority(child.pid)
     const chunks: Buffer[] = []
     let stderr = ''
     let killed = false

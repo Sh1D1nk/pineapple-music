@@ -17,3 +17,8 @@ tmp-*.cjs
 tmp-*.mjs
 soda37/
 soda38/
+fixtures/large/
+perf/fixtures-profile/
+perf/profile-large/
+perf/_*.json
+perf/_*.png

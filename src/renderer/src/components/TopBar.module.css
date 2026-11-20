@@ -462,6 +462,14 @@
   z-index: 45;
 }
 
+/* 传统底栏是「实色通栏」：里面的胶囊不再做玻璃，避免一条实色带里浮着几块半透明 */
+.barBottom :global(.glass) {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
 
 /* 远端（汽水）封面：和本地 Cover 同样的 34px 圆角方块 */
 .remoteCover {

@@ -33,7 +33,12 @@ npm run build          # 产出 Windows 安装包 dist/Pinnet-<版本>-setup.exe
 | `npm run fixtures` | 生成 10 个测试音频到 `fixtures/` |
 | `npm test` | vitest 单元测试（83 个用例） |
 | `npm run typecheck` | 主进程 + 渲染进程 strict 类型检查 |
+| `npm run start:prod` | 直接运行正式构建产物（无 dev/HMR/DevTools），性能测量必须用这个入口 |
 | `npm run verify` | 构建后用 Playwright 驱动 Electron，跑完整截图清单并输出 `screenshots/report.json` |
+| `npm run bench` | 点开延迟 / 滚动 / 播放响应基准 → `perf/after.json`；`-- --legacy` 跑上一版路径作基线；`-- --large` 用 5400 首夹具库 |
+| `npm run test:glass` | 液态玻璃验收：高对比背景下对比「完整折射 / 无位移」，输出 `perf/glass.json` 与近景截图 |
+| `npm run fixtures:large` | 生成 1800 张专辑 × 3 首的大库夹具（`fixtures/large`） |
+| `npm run report` | 把 `perf/*.json` 汇总成 `perf/REPORT.md` |
 | `npm run rebuild:native` | 需要时用 `electron-builder install-app-deps` 重建原生模块 |
 
 > 首次 `npm install` 时 Electron 与 ffmpeg-static 会从 GitHub 下载。`.npmrc` 已把 Electron 指向 npmmirror；
@@ -100,12 +105,29 @@ npm run build          # 产出 Windows 安装包 dist/Pinnet-<版本>-setup.exe
 
 `src/renderer/src/vendor/hyalite/` 是 [Hyalite v0.5.0](https://github.com/VII-Cae/hyalite--liquid-glass) 的**逐字节副本**（`hyalite.js` / `hyalite.d.ts` / `LICENSE` 原样保留，含版权头）。它按元素真实尺寸与圆角算 SDF 透镜图，喂给 `feDisplacementMap`，再用 `backdrop-filter: url(#…)` 对元素背后的实时内容做折射。
 
-- 为什么不用 WebGL/DOM 快照方案：歌词滚动与 AMLL 流体背景都是实时内容，快照类方案必然滞后或撕裂；Hyalite 走的是合成器层面的 backdrop-filter，天然跟手。
-- 两套参数：`FULL`（小控件：bevel 18 / thickness 34 / dispersion 1.4 / blur 2 / materialize 180）与 `LITE`（大面板：bevel 16 / thickness 26 / slope 0.9 / dispersion 0 / smooth 0 / blur 7）。参数在 `glass/hyalite.ts`。
-- 三档材质：完整折射 / 简化（`blur(22px) saturate(1.7)` + 高光边）/ 关闭（纯色半透明）。`GlassProvider` 在 `Hyalite.supported()` 为假、GPU 未硬件加速、系统「减少透明度」、或连续两个 3 秒窗口平均帧耗时超过阈值时自动降为简化，并给一次性轻提示。
-- 遵守上游约束：承载滤镜的隐藏 `<svg>` 不设 `display:none`；`--hyalite` 只由被附着元素自己读取；着色写在元素自身 `background`；玻璃元素没有 `opacity/filter/mask/mix-blend-mode` 祖先；进出场只动 `transform`。
+**配方对齐** [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass)（Apache-2.0，仅参考配方，未复制代码）的 Glass Bottom Bar：边缘折射带 16 px、最大位移目标 ≈ 32 px、模糊 4 px、色散 1.4，滤镜链 `saturate(1.5) var(--hyalite, blur(4px))`。
 
-**实测**（`screenshots/report.json`）：同一屏内容（相册网格滚到顶栏下方）下，完整折射与简化模式的顶栏区域平均通道差 **8.0/255**，**60.8%** 的像素有可测差异；`Hyalite.info()` 返回的透镜图 `maxDisplacement ≈ 8.8px`。截图 `24-glass-full.png` 与 `25-glass-simplified.png` 是同一场景的两次捕获，可直接对比。
+- 参数：`FULL`（小控件）bevel 16 / thickness 150 / dispersion 1.4 / blur 4 / slope 2.6 / materialize 180。`Hyalite.info().maxDisplacement` 实测 **27.9 px**（上一版 8.8 px 是「看不出折射」的直接原因）。
+- **只给小表面折射**：悬浮底栏胶囊、圆形按钮、右键菜单；同屏 ≤ 6 块。侧栏、面板、弹窗、卡片一律 CSS 磨砂 + 高光描边 —— 大面板的位移图又贵又超出预算。
+- 三档材质：完整折射 / 简化（`blur(22px) saturate(1.7)` + 高光边）/ 关闭。性能模式（自动实测掉帧 / 强制开）会把折射整体换成磨砂，动画参数不动。
+- 遵守上游约束：承载滤镜的隐藏 `<svg>` 不设 `display:none`；`--hyalite` 只由被附着元素自己读取；着色写在元素自身 `background`；玻璃元素没有 `opacity/filter/mask/mix-blend-mode` 祖先；进出场只动 `transform`；尺寸固定（改尺寸要重建位移图）。
+
+**自动验收**（`npm run test:glass`）：玻璃实验室（`Ctrl+Shift+G` / 设置 → 玻璃实验室）在高对比网格、文字、渐变、封面墙前放 5 个样例（64 px 胶囊、48 px 圆按钮、360×480 面板、248×700 侧栏、按压缩放），每个可切「完整折射 / 简化 / 关闭」并测 1.5 秒帧耗时。脚本把表面底色透明化，对比「完整折射」与「同饱和度 + 同 4 px 模糊、无位移」：
+
+- 边缘 8 px 带内 **56.7%** 的像素有差异（验收线 ≥ 30%）
+- 边缘 16 px 带内 29.3%
+- **中心区域 0%**（中心保持清晰）
+- 控制台 CSP 错误 **0**（`img-src` 必须含 `data:`，Hyalite 的位移图是 data URL）
+
+截图：`perf/glasslab.png`、`perf/bar-dark.png`、`perf/bar-light.png`、`perf/app-dark.png`、`perf/app-light.png`。
+
+**已知取舍**（写进设置与报告）：原生 View Transition 的整屏快照在集显上约 80–100 ms；「页面转场动画」关掉后点开即出（专辑详情 20 ms）。默认保留动画，桌面设置里可关。若未来 Hyalite 在 Electron 里仍达不到观感或超预算，备选是「高质量假折射」（磨砂 + 边缘高光渐变 + 内阴影 + 镜面高光），或小控件改用 [rdev/liquid-glass-react](https://github.com/rdev/liquid-glass-react)（MIT）；本轮实测不需要。
+
+### 3.1.1 悬浮玻璃播放底栏
+
+设置「播放控制位置」：**悬浮玻璃底栏（默认）** / 传统底栏（实色通栏贴底）/ 顶栏（旧布局）。三者共用同一套播放逻辑（含「网络音乐」页的汽水远端控制）。
+
+底栏组成：胶囊（封面 + 歌名/艺人 + 上一首/播放/下一首 + 进度线 + 悬停时间）+ 8 px 间距 + 圆形玻璃按钮（歌词 / 待播清单，强调色 `rgba(250,36,60,.75)`）。胶囊高 64 px、距底 14 px、左右 16 px，内容层底部留 96 px。按下时整颗胶囊按弹簧放大到 `(宽+16)/宽`（阻尼比 0.5、刚度 300、可被下一次按下打断），背后被折射的内容不跟着放大。进度不经过 React：每 200 ms 直接写 CSS 变量与文本，播放中不会因为时间变化重渲染底栏。
 
 ### 3.2 音频链路
 
@@ -124,6 +146,17 @@ npm run build          # 产出 Windows 安装包 dist/Pinnet-<版本>-setup.exe
 `better-sqlite3` 用的是 Node-API 预编译产物，因此**不需要** `electron-rebuild` 也能在 Electron 里加载（`npmRebuild: false`）。加载失败时 `openRepository()` 会退回 JSON 索引，功能不变。
 
 ---
+
+### 3.5 性能：点开延迟的测量与预算
+
+性能不是「感觉」问题，先建尺子再动刀：
+
+- **HUD**：`Ctrl+Shift+P` 开关（默认关，开启时自身开销极小）。显示 FPS 与帧耗时 p50/p95/p99、长任务、最近 20 次「点开延迟」及分段（同步 / 数据 / 提交 / 首帧 / 封面解码）、主进程事件循环延迟、GPU 型号与 `getGPUFeatureStatus()`、显示器刷新率/DPR、折射玻璃面数与 Hyalite 重建次数/位移、后台任务状态与线程数。
+- **打点**：`perf/core.ts` 从最近一次 `pointerdown` 起表，`setView` 结束记 sync，layout effect 记 commit，双 rAF 记首帧，首屏 `img.decode()` 记封面；同时统计点击后 300 ms 内的长任务与最大帧间隔。冷/热按「本次会话内该目标第一次打开」区分。
+- **基准**：`npm run bench`（Playwright 驱动真实窗口，正式构建）。每个可点开对象 1 次冷 + 20 次热；歌曲/专辑页滚动 10 s；播放/暂停 30 次点击；拖进度条 5 s；`--large` 跑 5400 首夹具库；`--legacy` 在同一份构建里走上一版路径做基线。报告：`perf/REPORT.md`。
+- **预算**（本机读数见报告）：热 p95 ≤ 50 ms、冷 ≤ 150 ms、点击回调同步 ≤ 8 ms、点击后 300 ms 无 > 50 ms 长任务、滚动 p95 ≤ 一帧预算、播放点击到出声 ≤ 80 ms、后台任务运行时劣化 ≤ 10%。
+
+支撑这些数字的实现：专辑/艺人列表虚拟化（固定卡片尺寸，只挂可见两三行）、页面保活用「绝对定位 + visibility」而不是 `display:none`（后者要整页重栅格化）、详情页从缓存 O(1) 取专辑而不是全库聚合、氛围底用 80 px 缩略图放大替代整屏 `blur(28px)`、播放进度直写 DOM、后台分析/分轨按输入空闲门控并降优先级。
 
 ## 4. AutoMix：做到了哪一级
 
@@ -164,6 +197,15 @@ npm test
 夹具覆盖：ID3v2.3（APIC + USLT + TCOM/TEXT/IPLS + 完整基础字段）、ID3v2.4（SYLT）、FLAC（PICTURE + LYRICS + 四个角色字段）、m4a（covr + ©lyr + ©wrt）、标准 LRC / 增强型逐字 LRC / 双语 LRC、声明 ISO-8859-1 实则 GBK 的 mp3 与 GBK 编码 .lrc、无标签「艺人 - 歌名.mp3」、以及 100 BPM 与 108 BPM 两首鼓点循环。
 
 83 个用例覆盖：标签映射与中文乱码修复、LRC/offset/双语/逐字解析、编码探测、节拍估计（合成点击轨 + 真实夹具解码）、响度与静音检测、TransitionPlanner 的 12 种场景（末句贴尾、前奏过长/过短、BPM 倍速、超限、速度不稳、gapless、响度匹配、相位误差）、任务队列的优先级/取消/重试。
+
+性能与玻璃的自动检查：
+
+```bash
+npm run bench        # 点开/滚动/播放基准 → perf/after.json
+npm run bench -- --legacy   # 上一版路径作基线 → perf/baseline.json
+npm run test:glass   # 玻璃验收 → perf/glass.json
+npm run report       # 汇总为 perf/REPORT.md
+```
 
 真实跑出来的数字：
 
@@ -226,6 +268,7 @@ LICENSE                   AGPL-3.0-only 全文
 | --- | --- | --- |
 | [Apple Music Like Lyrics (AMLL)](https://github.com/amll-dev/applemusic-like-lyrics) `@applemusic-like-lyrics/react` / `lyric` / `core` | **AGPL-3.0-only** | 歌词播放器、流体背景、歌词解析。版权归 AMLL 作者（steve-xmh 等）。AGPL 与本项目兼容，但要求整体以 AGPL 分发。 |
 | [Hyalite](https://github.com/VII-Cae/hyalite--liquid-glass) v0.5.0 | **MIT** © 2026 VII-Cae (VII) | 液态玻璃折射。`src/renderer/src/vendor/hyalite/LICENSE` 为原始许可全文，`hyalite.js` 文件头保留版权声明。MIT 与 AGPL 兼容。 |
+| [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) | **Apache-2.0** | 玻璃底栏的尺寸与折射配方参考（bevel/thickness/dispersion/按压弹簧），未复制代码。 |
 | [Signalsmith Stretch](https://www.signalsmith.com/) (npm `signalsmith-stretch`) | **MIT** | 时变变速不变调（AudioWorklet + WASM）。 |
 | [music-metadata](https://github.com/Borewit/music-metadata) | MIT | 标签读取。 |
 | [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) | MIT | 索引库（Node-API 预编译）。 |

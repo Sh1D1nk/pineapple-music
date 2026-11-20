@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { useStore } from './state/store'
 import { useTrayBridge } from './hooks/useTrayBridge'
 import { useNetMusicBridge } from './hooks/useNetMusicBridge'
@@ -24,6 +24,7 @@ import { FavoritesView } from './views/FavoritesView'
 import { SearchView } from './views/SearchView'
 import { SettingsView } from './views/SettingsView'
 import { TransitionLab } from './views/TransitionLab'
+import { GlassLab } from './views/GlassLab'
 import { EmptyState } from './views/EmptyState'
 import { startAutoMixScheduler } from './audio/automix'
 import { withViewTransition } from './lib/transition'
@@ -32,6 +33,12 @@ import { useGlass } from './glass/GlassProvider'
 import styles from './components/views.module.css'
 import overlayStyles from './components/overlays.module.css'
 import { ProgressWidget } from './components/ProgressWidget'
+import { FloatBar } from './components/FloatBar'
+import { PerfHud } from './perf/PerfHud'
+import { PerfGovernor } from './perf/Governor'
+import { finishPaint, hudEnabled, onHudChange, phase, setHud } from './perf/core'
+import { PERF_LEGACY, PERF_NO_KEEPALIVE } from './perf/flags'
+import type { View } from './state/store'
 
 function useTheme(): void {
   const settings = useStore((s) => s.settings)
@@ -115,6 +122,12 @@ function useShortcuts(): void {
       } else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'l') {
         event.preventDefault()
         state.setView({ kind: 'lab' })
+      } else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'p') {
+        event.preventDefault()
+        setHud(!hudEnabled())
+      } else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'g') {
+        event.preventDefault()
+        state.setView({ kind: 'glasslab' })
       } else if (event.key === 'F11') {
         event.preventDefault()
         void bridge.setFullScreen(!state.fullscreen)
@@ -174,33 +187,12 @@ function useDropTarget(): boolean {
   return dragActive
 }
 
-/** 主导航切换时的方向类：向上切（歌曲→最近添加）内容向上滚，反之向下。 */
-function navClass(direction: 'left' | 'right' | 'none'): string {
-  return direction === 'left' ? 'viewSwapLeft' : direction === 'right' ? 'viewSwapRight' : ''
-}
-
-function Pages(): JSX.Element {
-  useTrayBridge()
-  useNetMusicBridge()
-  useEffect(() => {
-    // 插件点「在 Pinnet 里播放」→ 主进程转发过来
-    return window.lm.on('navigate', ((view: { kind: string }) => {
-      if (view?.kind === 'netmusic') {
-        useStore.getState().setView(view as never)
-        // 和侧栏入口一致：直接落到全屏歌词页（远端模式，显示汽水正在播的曲目）
-        useStore.getState().setFullscreen(true)
-      } else if (view?.kind) {
-        useStore.getState().setView(view as never)
-      }
-    }) as never)
-  }, [])
-  const view = useStore((s) => s.view)
-  const songCount = useStore((s) => s.songIds.length)
-
+/** 页面内容本体。切页时不再重建它 —— 见 ViewHost 的保活缓存。 */
+function renderView(view: View): JSX.Element {
   if (view.kind === 'netmusic') return <div />
   if (view.kind === 'settings') return <SettingsView />
   if (view.kind === 'lab') return <TransitionLab />
-  if (songCount === 0) return <EmptyState />
+  if (view.kind === 'glasslab') return <GlassLab />
   switch (view.kind) {
     case 'songs':
       return <SongsView />
@@ -220,6 +212,113 @@ function Pages(): JSX.Element {
     default:
       return <AlbumsView title="最近添加" mode="recent" />
   }
+}
+
+/**
+ * 保活页面本体。memo 是关键：切页时父组件重渲染，隐藏页面不该跟着重建元素树
+ * （艺人页 300 行、专辑页十几个卡片，每次切页都重算就是几十毫秒的提交）。
+ */
+const Pane = memo(function Pane({ view }: { view: View }): JSX.Element {
+  const songCount = useStore((s) => s.songIds.length)
+  const exempt = view.kind === 'settings' || view.kind === 'lab' || view.kind === 'glasslab' || view.kind === 'netmusic'
+  if (songCount === 0 && !exempt) return <EmptyState />
+  return renderView(view)
+})
+
+const MAX_KEPT_VIEWS = 8
+
+/**
+ * 页面保活宿主。
+ *
+ * 之前是 `key={viewKey}` 一次性重建整棵视图树：切回列表要重新挂载几百张卡片、
+ * 重新发起封面请求、重新分组曲库——这就是「切回来总要先白一下」的来源。
+ * 现在每个访问过的页面各留一份 DOM，切走的 display:none，切回即出；
+ * 入场动画仍用同一组关键帧（38px + opacity + 同一条贝塞尔）通过 WAAPI 重放，
+ * 观感与原来的 .viewSwap 完全一致，但不再重建组件。
+ */
+function ViewHost(): JSX.Element {
+  useTrayBridge()
+  useNetMusicBridge()
+  useEffect(() => {
+    // 插件点「在 Pinnet 里播放」→ 主进程转发过来
+    return window.lm.on('navigate', ((view: { kind: string }) => {
+      if (view?.kind === 'netmusic') {
+        useStore.getState().setView(view as never)
+        useStore.getState().setFullscreen(true)
+      } else if (view?.kind) {
+        useStore.getState().setView(view as never)
+      }
+    }) as never)
+  }, [])
+  const view = useStore((s) => s.view)
+  const navDirection = useStore((s) => s.navDirection)
+  const key = JSON.stringify(view)
+  const [entries, setEntries] = useState<{ key: string; view: View }[]>(() => [{ key, view }])
+
+  // 渲染期派生：新页面加入缓存，超过上限时淘汰最久未用（绝不淘汰当前页）
+  if (!entries.some((entry) => entry.key === key)) {
+    const next = [...entries, { key, view }]
+    while (next.length > MAX_KEPT_VIEWS) {
+      const victim = next.findIndex((entry) => entry.key !== key)
+      if (victim < 0) break
+      next.splice(victim, 1)
+    }
+    setEntries(next)
+  }
+
+  useLayoutEffect(() => {
+    phase('commit')
+    const el = document.querySelector(`[data-view-key="${CSS.escape(key)}"]`) as HTMLElement | null
+    const root = document.documentElement
+    // 原生 View Transition 自己负责切页动画；主导航才重放 .viewSwap 的关键帧
+    if (el && navDirection !== 'none' && !root.dataset.vt) {
+      const dx = navDirection === 'left' ? 38 : -38
+      el.animate(
+        [
+          { opacity: 0, transform: `translate3d(${dx}px, 0, 0)` },
+          { opacity: 1, transform: 'none' }
+        ],
+        { duration: 440, easing: 'cubic-bezier(0.32, 0.72, 0, 1)', fill: 'both' }
+      )
+    }
+    let inner = 0
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => finishPaint())
+    })
+    return () => {
+      cancelAnimationFrame(outer)
+      cancelAnimationFrame(inner)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+
+  // A/B 对照：legacy 模式回到「每次切页整棵重建」，基线数字用它测
+  if (PERF_LEGACY || PERF_NO_KEEPALIVE) {
+    return (
+      <div key={key} className="viewPane viewPaneActive">
+        <Pane view={view} />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {entries.map((entry) => {
+        const active = entry.key === key
+        return (
+          <div
+            key={entry.key}
+            data-view-key={entry.key}
+            className={active ? 'viewPane viewPaneActive' : 'viewPane viewPaneHidden'}
+            aria-hidden={!active}
+            inert={!active}
+          >
+            <Pane view={entry.view} />
+          </div>
+        )
+      })}
+    </>
+  )
 }
 
 function Toasts(): JSX.Element {
@@ -263,6 +362,9 @@ export function App(): JSX.Element {
   const sidebarWidth = settings.sidebarWidth
   const dragActive = useDropTarget()
   const [kicked, setKicked] = useState(false)
+  const [hud, setHudVisible] = useState(hudEnabled())
+
+  useEffect(() => onHudChange(setHudVisible), [])
 
   useTheme()
   useShortcuts()
@@ -336,19 +438,24 @@ export function App(): JSX.Element {
 
   return (
     <GlassProvider mode={settings.glass}>
-      <div className="app" data-control-bar={settings.controlBar}>
-        <div className={`contentLayer ${settings.controlBar === 'bottom' ? 'withBottomBar' : ''}`}>
+      <PerfGovernor />
+      <div className="app" data-control-bar={settings.controlBar} data-perf-mode={settings.performanceMode}>
+        <div className={`contentLayer ${settings.controlBar !== 'top' ? 'withBottomBar' : ''}`}>
           <div className="scrollEdgeTop" />
           <div id="contentScroll" className={`contentScroll ${queueOpen ? 'withQueue' : ''}`}>
-            <div key={viewKey} className={`viewSwap ${navClass(navDirection)}`} data-nav-dir={navDirection}>
-              <Pages />
+            <div className="viewPaneStack" data-nav-dir={navDirection}>
+              <ViewHost />
             </div>
           </div>
         </div>
 
         <div className="floatLayer">
           {settings.theme === 'liquid' ? <BottomBar /> : <Sidebar />}
-          <TopBar variant={settings.controlBar === 'bottom' ? 'bottom' : 'top'} />
+          {settings.controlBar === 'float' ? (
+            <FloatBar />
+          ) : (
+            <TopBar variant={settings.controlBar === 'bottom' ? 'bottom' : 'top'} />
+          )}
           <QueuePanel />
           <LyricsPanel />
           <CoverFlow
@@ -356,6 +463,10 @@ export function App(): JSX.Element {
             onClose={() => setCoverFlowOpen(false)}
           />
         </div>
+
+        {/* 预热 GPU：全屏磨砂遮罩（歌曲信息/右键菜单）首次出现时要编译 blur 着色器，
+            集显上第一次能慢 400ms+。常驻一块 4×4 的微缩磨砂，启动即编译。 */}
+        <div className="blurWarm" aria-hidden="true" />
 
         <div className="overlayLayer">
           <FullscreenPlayer />
@@ -365,6 +476,7 @@ export function App(): JSX.Element {
           <ContextMenu />
           <Toasts />
           <GlassNotice />
+          <PerfHud active={hud} />
         </div>
 
         {dragActive && (

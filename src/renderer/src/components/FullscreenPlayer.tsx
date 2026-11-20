@@ -9,6 +9,7 @@ import { LyricsView, withDisplayOptions } from './LyricsView'
 import { useAutoMix } from '../audio/automix'
 import { formatRemaining, formatTime } from '../lib/format'
 import styles from './overlays.module.css'
+import { useOpenPaint } from '../perf/react'
 
 /**
  * 全屏正在播放。
@@ -52,6 +53,7 @@ export function FullscreenPlayer(): JSX.Element {
   }, [])
   const liveMs = net.playing ? net.basePositionMs + (performance.now() - net.baseAt) : net.basePositionMs
 
+  useOpenPaint(open)
   const [mounted, setMounted] = useState(open)
   /** 上一首/下一首/播放的按压动画（对齐插件的 saPushL/R/C） */
   const [push, setPush] = useState<'l' | 'r' | 'c' | null>(null)
@@ -116,7 +118,7 @@ export function FullscreenPlayer(): JSX.Element {
             words:
               Array.isArray(l.words) && l.words.length
                 ? l.words
-                : [{ startTime: l.startTime, endTime: l.endTime, word: l.text || '' }],
+                : [{ startTime: l.startTime, endTime: l.endTime, word: (l as { text?: string }).text || '' }],
             translatedLyric: l.translatedLyric ?? '',
             romanLyric: l.romanLyric ?? ''
           }))
@@ -363,7 +365,9 @@ export function FullscreenPlayer(): JSX.Element {
         : qualityLevel === 1
           ? { fps: 0.6, scale: 0.8, lyricLite: false }
           : { fps: 1, scale: 1, lyricLite: false }
-  const bgPerf = settings.bgPerf
+  const perfLow = useStore((s) => s.perfLow)
+  // 性能守护降级：降低背景采样与帧率、关掉逐行模糊（动画本身不变）
+  const bgPerf = settings.bgPerf || perfLow
   const baseFps = settings.bgFps > 0 ? settings.bgFps : 30
   const effectiveFps = Math.max(8, Math.round((bgPerf ? Math.min(baseFps, 24) : baseFps) * aq.fps))
   const effectiveScale = Math.max(
@@ -371,7 +375,7 @@ export function FullscreenPlayer(): JSX.Element {
     Math.min(1, (bgPerf ? Math.min(settings.bgRenderScale, 0.35) : settings.bgRenderScale) * aq.scale)
   )
   // 性能模式与最低档都关掉逐行的模糊/缩放遮罩：这是集成显卡上最后一块可省的开销
-  const lyricLite = bgPerf || aq.lyricLite
+  const lyricLite = bgPerf || aq.lyricLite || perfLow
 
   // 切歌扩散：把「墨滴落点」以 CSS 变量传给 mask 动画
   const rippleClass = ripple ? ` ${styles.fsRipple}` : ''

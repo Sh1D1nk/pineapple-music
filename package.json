@@ -22,7 +22,12 @@
     "verify": "npm run compile && node scripts/verify.mjs",
     "version:bump": "node scripts/bump-version.mjs",
     "release": "node scripts/bump-version.mjs && npm run build",
-    "publish:github": "git push -u origin main && git push --tags"
+    "publish:github": "git push -u origin main && git push --tags",
+    "start:prod": "node scripts/start-prod.mjs",
+    "bench": "node bench/run.mjs",
+    "test:glass": "node bench/glass.mjs",
+    "fixtures:large": "node scripts/make-fixtures-large.mjs",
+    "report": "node bench/report.mjs"
   },
   "dependencies": {
     "@applemusic-like-lyrics/core": "0.6.0",

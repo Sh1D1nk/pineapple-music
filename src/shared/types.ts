@@ -168,8 +168,22 @@ export interface AppSettings {
   closeBehavior: 'ask' | 'background' | 'quit';
   /** 汽水音乐插件连接 Pinnet 本地桥用的 token */
   netMusicToken: string;
-  /** 播放控制栏位置：顶栏（现状）/ 传统底栏 */
-  controlBar: 'top' | 'bottom';
+  /** 播放控制栏位置：悬浮玻璃底栏 / 传统底栏（实色通栏）/ 顶栏（旧布局） */
+  controlBar: 'float' | 'bottom' | 'top';
+  /**
+   * 性能模式：
+   *  auto = 按 HUD 实测帧耗时在「完整玻璃 / 简化玻璃 / 关歌词模糊」之间自动降级
+   *  on   = 强制省电档（玻璃简化、歌词模糊关、背景降分辨率与帧率）
+   *  off  = 全开（不做任何自动降级）
+   * 动画观感不受影响，只改变材质与背景采样密度。
+   */
+  performanceMode: 'auto' | 'on' | 'off';
+  /** 页面转场：封面形变 + 整页交叉淡入（原生 View Transition）。关掉后点开即出，省一次整屏快照 */
+  pageTransition: boolean;
+  /** 后台分析/分轨的让路策略：空闲时（默认）/ 始终 / 关闭 */
+  backgroundProcessing: 'idle' | 'always' | 'off';
+  /** 设置迁移版本：老配置升级时用来做一次性默认值调整（不覆盖用户的显式选择） */
+  settingsRevision?: number;
   glass: 'full' | 'lite' | 'off';
   sidebarWidth: number;
   lyricsPriority: ('sidecar' | 'embedded' | 'text')[];
@@ -241,7 +255,11 @@ export interface AppSettings {
 export const DEFAULT_SETTINGS: AppSettings = {
   closeBehavior: 'ask',
   netMusicToken: 'pinnet',
-  controlBar: 'top',
+  controlBar: 'float',
+  performanceMode: 'auto',
+  pageTransition: true,
+  settingsRevision: 2,
+  backgroundProcessing: 'idle',
   theme: 'system',
   glass: 'full',
   sidebarWidth: 248,

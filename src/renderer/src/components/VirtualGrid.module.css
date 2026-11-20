@@ -1,0 +1,23 @@
+/* 虚拟网格的定位层。高度由内联样式给出（总行数 × 行高），
+   每一行绝对定位后用 transform 平移，浏览器只合成、不重排。 */
+.host {
+  width: 100%;
+}
+
+.row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: 100%;
+}
+
+.cell {
+  min-width: 0;
+}
+
+/* 卡片内容固定高度，行高才可预测：
+   正方形封面 + 8px + 标题 18px + 副标题 16px = 封面 + 42px + 24px 行距 */
+.cell > * {
+  display: block;
+}

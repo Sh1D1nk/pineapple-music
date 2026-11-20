@@ -28,8 +28,20 @@ export class SettingsService {
     const file = settingsFile()
     if (!existsSync(file)) return structuredClone(DEFAULT_SETTINGS)
     try {
-      const raw = JSON.parse(readFileSync(file, 'utf8')) as Partial<AppSettings>
-      return deepMerge(structuredClone(DEFAULT_SETTINGS), raw)
+      const raw = JSON.parse(readFileSync(file, 'utf8')) as Partial<AppSettings> & { settingsRevision?: number }
+      const merged = deepMerge(structuredClone(DEFAULT_SETTINGS), raw)
+      // v2：播放控制栏默认从顶栏改为「悬浮玻璃底栏」。
+      // 只在从未记录过 revision 的老配置上做一次，之后用户手动切回顶栏/传统底栏不会被再改。
+      if (raw.settingsRevision === undefined) {
+        merged.controlBar = 'float'
+        merged.settingsRevision = 2
+        try {
+          writeFileSync(settingsFile(), JSON.stringify(merged, null, 2))
+        } catch {
+          /* best effort */
+        }
+      }
+      return merged
     } catch {
       return structuredClone(DEFAULT_SETTINGS)
     }

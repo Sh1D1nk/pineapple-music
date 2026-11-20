@@ -1,0 +1,318 @@
+/* 悬浮玻璃播放底栏。
+   尺寸对齐配方：胶囊高 64、距底 14、左右 16；圆按钮组与胶囊间距 8。
+   所有尺寸固定 —— Hyalite 的位移图与几何绑定，尺寸一变就要在主线程重建。 */
+
+.wrap {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.capsule {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  border-radius: 32px;
+  pointer-events: auto;
+  /* 表面着色保证可读性：浅色半透明白 / 深色半透明炭黑 */
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  transform: scale(var(--press-x, 1), var(--press-y, 1));
+  transform-origin: center center;
+  will-change: transform;
+  user-select: none;
+}
+
+:global([data-theme='dark']) .capsule {
+  background: rgba(28, 28, 30, 0.45);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.cover {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  position: relative;
+}
+
+.cover img,
+.cover > div {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 17px;
+  color: var(--text-primary);
+}
+
+.artist {
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--text-secondary);
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.iconButton {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.iconButton:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+:global([data-theme='light']) .iconButton:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.playButton {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: transform 140ms var(--ease), background 140ms ease;
+}
+
+.playButton:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.playButton:active {
+  transform: scale(0.94);
+}
+
+:global([data-theme='light']) .playButton {
+  background: rgba(0, 0, 0, 0.07);
+}
+
+.volume {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.volumeSlider {
+  position: absolute;
+  left: 50%;
+  bottom: 40px;
+  width: 92px;
+  transform: translateX(-50%) translateY(4px);
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(20, 20, 22, 0.92);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.volume[data-open='1'] .volumeSlider {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.volumeTrack {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.22);
+  cursor: pointer;
+}
+
+.volumeFill {
+  height: 100%;
+  border-radius: 2px;
+  background: #fff;
+}
+
+/* 进度：贴在胶囊底沿的细线，拖动时加粗 */
+.progress {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+:global([data-theme='light']) .progress {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.progressFill {
+  height: 100%;
+  width: calc(var(--p, 0) * 100%);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.85);
+  transition: width 80ms linear;
+}
+
+:global([data-theme='light']) .progressFill {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.progressDragging {
+  height: 5px;
+}
+
+.progressDragging .progressFill {
+  transition: none;
+}
+
+.times {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+  font-variant-numeric: tabular-nums;
+}
+
+.capsule:hover .times,
+.capsule[data-dragging='true'] .times {
+  opacity: 1;
+}
+
+/* 圆形玻璃按钮：强调色着色，独立于胶囊的玻璃组 */
+.roundGroup {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 64px;
+  padding: 6px;
+  border-radius: 999px;
+  pointer-events: auto;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+:global([data-theme='dark']) .roundGroup {
+  background: rgba(28, 28, 30, 0.4);
+}
+
+.round {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(250, 36, 60, 0.75);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 4px 12px rgba(250, 36, 60, 0.28);
+  transition: transform 160ms var(--ease), filter 160ms ease;
+}
+
+.round:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.round:active {
+  transform: scale(0.95);
+}
+
+.round.active {
+  filter: brightness(1.16) saturate(1.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 6px 18px rgba(250, 36, 60, 0.45);
+}
+
+/* 视口窄时优先保住胶囊：圆按钮组收窄 */
+@media (max-width: 900px) {
+  .wrap {
+    left: 12px;
+    right: 12px;
+  }
+
+  .round {
+    width: 40px;
+    height: 40px;
+  }
+
+  .roundGroup {
+    height: 56px;
+  }
+
+  .capsule {
+    height: 56px;
+    border-radius: 28px;
+  }
+}

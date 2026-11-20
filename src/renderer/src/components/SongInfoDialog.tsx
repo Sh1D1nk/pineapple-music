@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX } from 'react'
 import { useStore } from '../state/store'
+import { useOpenPaint } from '../perf/react'
 import { bridge } from '../bridge'
 import type { SongInfoExtra } from '@shared/types'
 import { Cover } from './Cover'
@@ -36,6 +37,7 @@ export function SongInfoDialog(): JSX.Element | null {
     return () => window.removeEventListener('keydown', onKey)
   }, [songId, setInfoSongId])
 
+  useOpenPaint(Boolean(songId))
   if (!songId) return null
   const song = songs[songId]
   if (!song) return null

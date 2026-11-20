@@ -5,6 +5,7 @@ import { Icon } from './Icon'
 import { formatTime } from '../lib/format'
 import { useAutoMix } from '../audio/automix'
 import styles from './overlays.module.css'
+import { useOpenPaint } from '../perf/react'
 
 export function QueuePanel(): JSX.Element {
   const open = useStore((s) => s.queueOpen)
@@ -19,6 +20,7 @@ export function QueuePanel(): JSX.Element {
   const automixNext = useAutoMix((s) => s.nextSongId)
   const automixStatus = useAutoMix((s) => s.status)
 
+  useOpenPaint(open)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
 

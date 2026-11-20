@@ -21,6 +21,7 @@ import { probeModel } from './media/stemRuntime'
 import type { SettingsService } from './settings'
 import { favoritesFile, modelsDir, userDataDir } from './paths'
 import { readFavorites, toggleFavorite, writeFavorites } from './favorites'
+import { setBackgroundMode } from './governor'
 
 interface Deps {
   library: LibraryService
@@ -188,6 +189,7 @@ export function registerIpc(deps: Deps): void {
   ipcMain.handle('settings/get', (): AppSettings => settings.get())
   ipcMain.handle('settings/set', (_e, patch: Partial<AppSettings>) => {
     const next = settings.patch(patch)
+    if (patch.backgroundProcessing) setBackgroundMode(patch.backgroundProcessing)
     const win = getWindow()
     if (win) applyOverlay(win, next)
     return next

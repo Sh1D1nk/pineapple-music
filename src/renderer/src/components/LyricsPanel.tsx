@@ -6,6 +6,7 @@ import { Cover } from './Cover'
 import { LyricsView, withDisplayOptions } from './LyricsView'
 import { engine } from '../audio/engine'
 import styles from './overlays.module.css'
+import { useOpenPaint } from '../perf/react'
 
 export function LyricsPanel(): JSX.Element {
   const open = useStore((s) => s.lyricsOpen)
@@ -16,6 +17,7 @@ export function LyricsPanel(): JSX.Element {
 
   // Keep the tree mounted through the slide-out, then unmount: AMLL's background renderer keeps
   // drawing at 60 fps and would otherwise burn GPU while the panel is off screen.
+  useOpenPaint(open)
   const [mounted, setMounted] = useState(open)
   useEffect(() => {
     if (open) {
@@ -40,8 +42,9 @@ export function LyricsPanel(): JSX.Element {
     return withDisplayOptions(lyricsForCurrent.lines, settings.showTranslation, settings.showRoman)
   }, [lyricsForCurrent, settings.showTranslation, settings.showRoman])
 
+  const perfLow = useStore((s) => s.perfLow)
   const quality = settings.backgroundQuality
-  const fps = quality === 'high' ? 60 : quality === 'medium' ? 30 : 24
+  const fps = perfLow ? 24 : quality === 'high' ? 60 : quality === 'medium' ? 30 : 24
   // 封面只能用「被压暗的氛围底」的身份存在：亮度/饱和度走用户设置，再叠一层渐变压暗。
   // 这两条与全屏页的 fsBg + fsTint 同一套数值，面板此前两者皆无，于是整块面板看着就是一张封面。
   const bgFilter = `saturate(${settings.bgSaturate}) brightness(${settings.bgBrightness})`
