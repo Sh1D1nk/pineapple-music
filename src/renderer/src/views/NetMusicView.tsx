@@ -47,7 +47,7 @@ export function NetMusicView(): JSX.Element {
   const cover = net.track?.coverUrl ?? null
 
   return (
-    <div className={styles.stage}>
+    <div className={`${styles.stage} ${styles.fullscreen}`}>
       {cover && (
         <img
           className={styles.bg}

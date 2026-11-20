@@ -191,7 +191,7 @@ function Pages(): JSX.Element {
   const view = useStore((s) => s.view)
   const songCount = useStore((s) => s.songIds.length)
 
-  if (view.kind === 'netmusic') return <NetMusicView />
+  if (view.kind === 'netmusic') return <div />
   if (view.kind === 'settings') return <SettingsView />
   if (view.kind === 'lab') return <TransitionLab />
   if (songCount === 0) return <EmptyState />
@@ -341,6 +341,7 @@ export function App(): JSX.Element {
         </div>
 
         <div className="floatLayer">
+          {view.kind === 'netmusic' && <NetMusicView />}
           {settings.theme === 'liquid' ? <BottomBar /> : <Sidebar />}
           <TopBar variant={settings.controlBar === 'bottom' ? 'bottom' : 'top'} />
           <QueuePanel />

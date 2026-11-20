@@ -1,13 +1,19 @@
-/* 「网络音乐」= 汽水音乐的歌词界面：整页铺满，封面当背景，歌词居中，底部一条控制栏 */
+/* 「网络音乐」= 汽水音乐的歌词界面：直接盖满整个窗口（和全屏歌词同级的体验），
+   侧栏与顶栏都被它盖住；封面当背景，歌词居中，底部一条控制栏 */
 
 .stage {
   position: relative;
-  margin: -24px -32px 0;
-  height: calc(100vh - 132px);
-  min-height: 460px;
-  overflow: hidden;
-  border-radius: 18px;
   isolation: isolate;
+  /* 不透明底色：封面还没加载时也不让下层 UI 透出来 */
+  background: #0b0b0d;
+}
+
+.fullscreen {
+  position: fixed;
+  inset: 0;
+  /* 盖过侧栏 / 顶栏 / 底栏 / 队列面板（它们最高 60 左右） */
+  z-index: 90;
+  border-radius: 0;
 }
 
 /* 封面背景：放大 + 重度模糊 + 压暗，和全屏歌词页一个味道 */
