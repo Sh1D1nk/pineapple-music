@@ -7,7 +7,8 @@ import type {
   LyricsPayload,
   ScanProgress,
   SongInfoExtra,
-  SongMeta
+  SongMeta,
+  UpdateStatus
 } from '@shared/types'
 
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> =>
@@ -74,6 +75,11 @@ export const bridge = {
     pause: () => invoke<void>('stems/pause'),
     resume: () => invoke<void>('stems/resume'),
     cancel: () => invoke<void>('stems/cancel')
+  },
+  update: {
+    status: () => invoke<UpdateStatus>('update/status'),
+    check: () => invoke<UpdateStatus>('update/check'),
+    open: () => invoke<boolean>('update/open')
   },
   models: {
     status: () =>

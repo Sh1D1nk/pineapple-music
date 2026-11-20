@@ -33,6 +33,7 @@ import { useGlass } from './glass/GlassProvider'
 import styles from './components/views.module.css'
 import overlayStyles from './components/overlays.module.css'
 import { ProgressWidget } from './components/ProgressWidget'
+import { UpdateNotice } from './components/UpdateNotice'
 import { FloatBar } from './components/FloatBar'
 import { PerfHud } from './perf/PerfHud'
 import { PerfGovernor } from './perf/Governor'
@@ -252,6 +253,8 @@ function ViewHost(): JSX.Element {
   }, [])
   const view = useStore((s) => s.view)
   const navDirection = useStore((s) => s.navDirection)
+  // 导航形态决定切页方向：侧边栏是上下滚，液态玻璃底栏才是左右推
+  const horizontal = useStore((s) => s.settings.theme === 'liquid')
   const key = JSON.stringify(view)
   const [entries, setEntries] = useState<{ key: string; view: View }[]>(() => [{ key, view }])
 
@@ -272,14 +275,18 @@ function ViewHost(): JSX.Element {
     const root = document.documentElement
     // 原生 View Transition 自己负责切页动画；主导航才重放 .viewSwap 的关键帧
     if (el && navDirection !== 'none' && !root.dataset.vt) {
-      const dx = navDirection === 'left' ? 38 : -38
-      el.animate(
+      const offset = navDirection === 'left' ? 38 : -38
+      const from = horizontal ? `translate3d(${offset}px, 0, 0)` : `translate3d(0, ${offset}px, 0)`
+      // 同一元素上不要叠着上一次 fill:both 的动画：先清掉，结束后也主动取消
+      for (const previous of el.getAnimations()) previous.cancel()
+      const anim = el.animate(
         [
-          { opacity: 0, transform: `translate3d(${dx}px, 0, 0)` },
+          { opacity: 0, transform: from },
           { opacity: 1, transform: 'none' }
         ],
         { duration: 440, easing: 'cubic-bezier(0.32, 0.72, 0, 1)', fill: 'both' }
       )
+      void anim.finished.then(() => anim.cancel()).catch(() => undefined)
     }
     let inner = 0
     const outer = requestAnimationFrame(() => {
@@ -353,6 +360,8 @@ export function App(): JSX.Element {
   const settings = useStore((s) => s.settings)
   const view = useStore((s) => s.view)
   const navDirection = useStore((s) => s.navDirection)
+  // 导航形态决定切页方向：侧边栏是上下滚，液态玻璃底栏才是左右推
+  const horizontal = useStore((s) => s.settings.theme === 'liquid')
   const coverFlowOpen = useStore((s) => s.coverFlowOpen)
   const setCoverFlowOpen = useStore((s) => s.setCoverFlowOpen)
   const viewKey = JSON.stringify(view)
@@ -476,6 +485,7 @@ export function App(): JSX.Element {
           <ContextMenu />
           <Toasts />
           <GlassNotice />
+          <UpdateNotice />
           <PerfHud active={hud} />
         </div>
 

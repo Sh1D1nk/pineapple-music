@@ -368,6 +368,9 @@ export function SettingsView(): JSX.Element {
     const id = s.playback.queue[s.playback.index]?.songId
     return id ? (s.songs[id]?.stem?.state ?? 'none') : 'none'
   })
+  const upd = useStore((s) => s.update)
+  const checkUpdate = useStore((s) => s.checkUpdate)
+  const openUpdate = useStore((s) => s.openUpdate)
   const [stemsReady, setStemsReady] = useState(false)
   useEffect(() => {
     void bridge.stems
@@ -897,6 +900,72 @@ export function SettingsView(): JSX.Element {
             <Icon name="waveform" size={13} /> 打开 Transition Lab
           </button>
         </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionTitle}>关于与更新</div>
+        <Row
+          label="当前版本"
+          hint={upd?.fake ? '正在使用测试数据（PINNET_UPDATE_FAKE）' : `更新源：github.com/${upd?.repo ?? 'Sh1D1nk/pineapple-music'} 的 Releases`}
+        >
+          <span className={styles.valueText}>v{upd?.current ?? '—'}</span>
+        </Row>
+        <Row
+          label="更新状态"
+          hint={
+            upd?.checkedAt
+              ? `上次检查：${new Date(upd.checkedAt).toLocaleString('zh-CN', { hour12: false })}`
+              : '还没有检查过'
+          }
+        >
+          <span className={upd?.error ? styles.valueWarn : styles.valueText}>
+            {upd?.checking
+              ? '检查中…'
+              : upd?.error
+                ? upd.error
+                : upd?.hasUpdate
+                  ? `发现新版本 v${upd.latest}`
+                  : upd
+                    ? '已是最新'
+                    : '—'}
+          </span>
+        </Row>
+        <Row label="自动检查更新" hint="启动约 8 秒后检查；只提示，不会自动下载或静默安装">
+          <Switch
+            value={settings.autoUpdateCheck}
+            onChange={(autoUpdateCheck) => void update({ autoUpdateCheck })}
+          />
+        </Row>
+        <div className={styles.buttonRow}>
+          <button
+            type="button"
+            className={styles.segment}
+            style={{ height: 30 }}
+            disabled={Boolean(upd?.checking)}
+            onClick={() => void checkUpdate()}
+          >
+            {upd?.checking ? '检查中…' : '检查更新'}
+          </button>
+          <button
+            type="button"
+            className={styles.segment}
+            style={{ height: 30 }}
+            disabled={!upd?.hasUpdate}
+            onClick={() => void openUpdate()}
+          >
+            前往 GitHub 更新
+          </button>
+        </div>
+        {upd?.hasUpdate && upd.asset && (
+          <div className={styles.note}>
+            安装包：{upd.asset.name}（{(upd.asset.size / 1024 / 1024).toFixed(0)} MB）。点「前往 GitHub 更新」打开 Release 页面自行下载覆盖安装。
+          </div>
+        )}
+        {upd?.notes && (
+          <div className={styles.note} style={{ whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'auto' }}>
+            {upd.notes.slice(0, 400)}
+          </div>
+        )}
       </section>
     </div>
   )

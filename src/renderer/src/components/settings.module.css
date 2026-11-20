@@ -374,3 +374,16 @@
   line-height: 1.55;
   word-break: break-word;
 }
+
+
+/* 关于与更新：状态文字 */
+.valueText {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.valueWarn {
+  font-size: 12px;
+  color: #fa243c;
+}

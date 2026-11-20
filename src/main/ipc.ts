@@ -19,6 +19,7 @@ import type { StemService } from './media/stemService'
 import { decodeClip, type PcmClip } from './media/ffmpeg'
 import { probeModel } from './media/stemRuntime'
 import type { SettingsService } from './settings'
+import type { UpdateService } from './updater'
 import { favoritesFile, modelsDir, userDataDir } from './paths'
 import { readFavorites, toggleFavorite, writeFavorites } from './favorites'
 import { setBackgroundMode } from './governor'
@@ -29,6 +30,7 @@ interface Deps {
   analysis: AnalysisService
   stems: StemService
   settings: SettingsService
+  updater: UpdateService
   getWindow: () => BrowserWindow | null
 }
 
@@ -51,7 +53,7 @@ function cacheSegment(key: string, clip: PcmClip): void {
 }
 
 export function registerIpc(deps: Deps): void {
-  const { library, lyrics, analysis, stems, settings, getWindow } = deps
+  const { library, lyrics, analysis, stems, settings, updater, getWindow } = deps
 
   ipcMain.handle('library/snapshot', () => ({
     songs: library.snapshot(),
@@ -190,10 +192,20 @@ export function registerIpc(deps: Deps): void {
   ipcMain.handle('settings/set', (_e, patch: Partial<AppSettings>) => {
     const next = settings.patch(patch)
     if (patch.backgroundProcessing) setBackgroundMode(patch.backgroundProcessing)
+    if (patch.autoUpdateCheck !== undefined) {
+      updater.setAuto(patch.autoUpdateCheck)
+      // 刚打开自动检查时立刻排一次，不用等下一次启动
+      if (patch.autoUpdateCheck) updater.scheduleInitialCheck(1200)
+    }
     const win = getWindow()
     if (win) applyOverlay(win, next)
     return next
   })
+
+  /* ---- 更新检查（GitHub Releases，只提示 + 打开页面） ---- */
+  ipcMain.handle('update/status', () => updater.get())
+  ipcMain.handle('update/check', () => updater.check(true))
+  ipcMain.handle('update/open', () => updater.openRelease())
 
   /* ---- 分轨：模型状态 + 任务控制 ---- */
   ipcMain.handle('stems/status', async () => ({ ...(await stems.status()), progress: stems.snapshot() }))

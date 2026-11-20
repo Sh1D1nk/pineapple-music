@@ -59,7 +59,10 @@ const INVOKE_CHANNELS = [
   'window/state',
   'netmusic/status',
   'netmusic/command',
-  'perf/main'
+  'perf/main',
+  'update/status',
+  'update/check',
+  'update/open'
 ] as const
 
 type InvokeChannel = (typeof INVOKE_CHANNELS)[number]

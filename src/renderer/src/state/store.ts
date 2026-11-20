@@ -12,6 +12,7 @@ import type {
 } from '@shared/types'
 import { DEFAULT_SETTINGS } from '@shared/types'
 import type { NetLyricLine, NetStatus, NetTrack } from '@shared/netmusic'
+import type { UpdateStatus } from '@shared/types'
 import { bridge } from '../bridge'
 import { nextQueueIndex, prevQueueIndex } from '../lib/queueNav'
 import { engine, type EngineSnapshot } from '../audio/engine'
@@ -138,6 +139,8 @@ interface StoreState {
   /** 汽水音乐（插件桥）送来的状态；播放进度靠 basePositionMs + baseAt 本地插值 */
   netMusic: NetMusicState
   netStatus: NetStatus
+  /** GitHub Release 更新检查结果（只提示 + 打开页面） */
+  update: UpdateStatus | null
 
   init: () => Promise<void>
   setView: (view: View, options?: { silent?: boolean }) => void
@@ -156,6 +159,9 @@ interface StoreState {
   setPerfLow: (low: boolean) => void
   setNetMusic: (patch: Partial<NetMusicState>) => void
   setNetStatus: (status: NetStatus) => void
+  setUpdate: (status: UpdateStatus) => void
+  checkUpdate: () => Promise<void>
+  openUpdate: () => Promise<void>
   pushToast: (text: string) => void
   dismissToast: (id: number) => void
   toggleFavoriteSong: (id: string) => Promise<void>
@@ -347,6 +353,7 @@ export const useStore = create<StoreState>((set, get) => {
       port: 17891,
       lastError: null
     },
+    update: null,
     playback: {
       queue: [],
       index: 0,
@@ -376,6 +383,7 @@ export const useStore = create<StoreState>((set, get) => {
         bridge.on('library/progress', ((progress: ScanProgress) => get().setScan(progress)) as never)
         bridge.on('library/folders', ((folders: { path: string; addedAt: number }[]) => set({ folders })) as never)
         bridge.on('analysis/progress', ((progress: AnalysisProgress) => get().setAnalysis(progress)) as never)
+        bridge.on('update/status', ((status: UpdateStatus) => get().setUpdate(status)) as never)
         bridge.on('media/key', ((key: string) => {
           if (key === 'toggle') get().togglePlay()
           else if (key === 'next') get().next()
@@ -398,6 +406,7 @@ export const useStore = create<StoreState>((set, get) => {
           .sort((a, b) => b.addedAt - a.addedAt)
           .map((s) => s.id)
         const analysis = await bridge.analysisProgress().catch(() => emptyAnalysis)
+        const updateStatus = await bridge.update.status().catch(() => null)
         set({
           ready: true,
           songs: map,
@@ -406,7 +415,8 @@ export const useStore = create<StoreState>((set, get) => {
           scan: snapshot.progress,
           settings,
           favorites,
-          analysis
+          analysis,
+          update: updateStatus
         })
 
         collecting = false
@@ -570,6 +580,16 @@ export const useStore = create<StoreState>((set, get) => {
     },
     setNetStatus(status) {
       set({ netStatus: status })
+    },
+    setUpdate(status) {
+      set({ update: status })
+    },
+    async checkUpdate() {
+      const status = await bridge.update.check().catch(() => null)
+      if (status) set({ update: status })
+    },
+    async openUpdate() {
+      await bridge.update.open().catch(() => false)
     },
     pushToast(text) {
       const id = Date.now() + Math.random()

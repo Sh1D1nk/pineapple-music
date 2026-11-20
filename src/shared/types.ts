@@ -162,6 +162,29 @@ export interface SongInfoExtra {
   lyricsSource: string;
 }
 
+export interface UpdateAsset {
+  name: string;
+  size: number;
+  url: string;
+}
+
+/** 更新检查状态：只提示 + 打开 Release 页，不做静默安装。 */
+export interface UpdateStatus {
+  current: string;
+  latest: string | null;
+  hasUpdate: boolean;
+  checking: boolean;
+  checkedAt: number | null;
+  error: string | null;
+  releaseName: string | null;
+  releaseUrl: string | null;
+  publishedAt: string | null;
+  notes: string | null;
+  asset: UpdateAsset | null;
+  repo: string;
+  fake: boolean;
+}
+
 export interface AppSettings {
   theme: 'system' | 'light' | 'dark' | 'liquid';
   /** 关闭主窗口时的行为：每次询问 / 后台继续播放 / 直接退出 */
@@ -180,6 +203,8 @@ export interface AppSettings {
   performanceMode: 'auto' | 'on' | 'off';
   /** 页面转场：封面形变 + 整页交叉淡入（原生 View Transition）。关掉后点开即出，省一次整屏快照 */
   pageTransition: boolean;
+  /** 启动后自动检查 GitHub Releases 更新（只提示，不下载） */
+  autoUpdateCheck: boolean;
   /** 后台分析/分轨的让路策略：空闲时（默认）/ 始终 / 关闭 */
   backgroundProcessing: 'idle' | 'always' | 'off';
   /** 设置迁移版本：老配置升级时用来做一次性默认值调整（不覆盖用户的显式选择） */
@@ -258,6 +283,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   controlBar: 'float',
   performanceMode: 'auto',
   pageTransition: true,
+  autoUpdateCheck: true,
   settingsRevision: 2,
   backgroundProcessing: 'idle',
   theme: 'system',

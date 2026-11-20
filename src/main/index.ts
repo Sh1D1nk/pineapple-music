@@ -12,6 +12,7 @@ import { registerProtocols, registerSchemes } from './protocols'
 import { windowStateFile } from './paths'
 import { TrayController } from './tray'
 import { NetMusicBridge } from './netMusic'
+import { UpdateService } from './updater'
 import { askCloseBehavior, resolveCloseDecision, type CloseDecision } from './closeDialog'
 import { perfSnapshot, startPerfSampler, stopPerfSampler } from './perf'
 import { lowerProcessPriority, noteUserInput, setBackgroundMode } from './governor'
@@ -58,6 +59,7 @@ let analysisService: AnalysisService | null = null
 let stemService: StemService | null = null
 let trayController: TrayController | null = null
 let netMusic: NetMusicBridge | null = null
+let updateService: UpdateService | null = null
 /** 真正要退出时为 true：close 拦截放行，避免「后台播放」把自己锁在里面 */
 let quitting = false
 let closeDialogOpen = false
@@ -233,12 +235,18 @@ app.whenReady().then(async () => {
 
   mainWindow = createWindow()
   registerProtocols(libraryService)
+  updateService = new UpdateService()
+  updateService.on('status', (status) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update/status', status)
+  })
+
   registerIpc({
     library: libraryService,
     lyrics: lyricsService,
     analysis: analysisService,
     stems: stemService,
     settings: settingsService,
+    updater: updateService,
     getWindow: () => mainWindow
   })
   wireEvents({
@@ -247,6 +255,7 @@ app.whenReady().then(async () => {
     analysis: analysisService,
     stems: stemService,
     settings: settingsService,
+    updater: updateService,
     getWindow: () => mainWindow
   })
 
@@ -298,6 +307,14 @@ app.whenReady().then(async () => {
   }
 
   registerMediaKeys()
+
+  // 自动检查更新：启动 8 秒后（让首屏先稳定），只在设置开启时
+  if (settingsService.get().autoUpdateCheck !== false) {
+    updateService.setAuto(true)
+    updateService.scheduleInitialCheck(8000)
+  } else {
+    updateService.setAuto(false)
+  }
 
   ipcMain.handle('netmusic/status', () => {
     const latest = netMusic?.latest()
@@ -415,6 +432,8 @@ app.on('before-quit', () => {
   stopPerfSampler()
   netMusic?.stop()
   netMusic = null
+  updateService?.dispose()
+  updateService = null
   trayController?.destroy()
   trayController = null
   globalShortcut.unregisterAll()
