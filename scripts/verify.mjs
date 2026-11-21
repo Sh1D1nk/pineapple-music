@@ -69,7 +69,7 @@ const search = async (text) => {
 
 const setGlass = async (value) => {
   await goto('设置')
-  await page.locator(`[data-segment="${value}"]`).first().click()
+  await page.locator(`[data-segment="${value}"]:visible`).first().click()
   await page.waitForTimeout(1000)
   const applied = await page.evaluate(() => document.documentElement.dataset.glass)
   if (applied !== value) console.log('WARN glass not applied:', applied, 'expected', value)
@@ -77,7 +77,7 @@ const setGlass = async (value) => {
 
 const setTheme = async (value) => {
   await goto('设置')
-  await page.locator(`[data-segment="${value}"]`).first().click()
+  await page.locator(`[data-segment="${value}"]:visible`).first().click()
   await page.waitForTimeout(800)
 }
 
@@ -128,7 +128,8 @@ await page.evaluate(() => {
 })
 await shot('04-albums-scrolled-light')
 
-await page.locator('[data-album-card]').first().click()
+// 页面保活会保留隐藏的页面副本，first() 可能命中 visibility:hidden 的卡片；只点可见的。
+await page.locator('[data-album-card]:visible').first().click()
 await page.waitForTimeout(500)
 await shot('05-album-detail-light')
 
@@ -142,7 +143,7 @@ await search('')
 // play a song with enhanced (word-level) lyrics
 await goto('歌曲')
 await search('逐字')
-const rows = page.locator('[data-song-row]')
+const rows = page.locator('[data-song-row]:visible')
 await rows.first().dblclick()
 await page.waitForTimeout(2200)
 await shot('08-topbar-playing-light')
@@ -156,13 +157,13 @@ await page.locator('button[title="待播清单"]').first().click()
 await page.waitForTimeout(900)
 await shot('10-queue-panel-light')
 
-await page.locator('button[title="打开全屏正在播放"]').first().click()
+await page.locator('button[title="全屏播放"]:visible').first().click()
 await page.waitForTimeout(1200)
 await shot('11-fullscreen-lyrics-light')
 await page.keyboard.press('Escape')
 await page.waitForTimeout(700)
 
-await page.locator('[data-song-row]').first().click({ button: 'right' })
+await page.locator('[data-song-row]:visible').first().click({ button: 'right' })
 await page.waitForTimeout(450)
 await shot('12-context-menu-light')
 await page.getByText('歌曲信息…').click()
@@ -180,7 +181,7 @@ await shot('15-settings-dark')
 
 await goto('歌曲')
 await search('逐字')
-await page.locator('[data-song-row]').first().dblclick()
+await page.locator('[data-song-row]:visible').first().dblclick()
 await page.waitForTimeout(2000)
 await shot('16-songs-dark')
 await shot('16b-topbar-closeup-dark', { x: 0, y: 0, width: 1280, height: 66 })
@@ -189,7 +190,7 @@ await page.locator('button[title^="歌词"]').first().click()
 await page.waitForTimeout(1200)
 await shot('17-lyrics-panel-dark')
 
-await page.locator('button[title="打开全屏正在播放"]').first().click()
+await page.locator('button[title="全屏播放"]:visible').first().click()
 await page.waitForTimeout(1300)
 await shot('18-fullscreen-lyrics-dark')
 
@@ -216,7 +217,8 @@ await page.evaluate(() => {
   if (el) el.scrollTop = 150
 })
 await shot('19-albums-scrolled-dark')
-await page.locator('[data-album-card]').first().click()
+// 页面保活会保留隐藏的页面副本，first() 可能命中 visibility:hidden 的卡片；只点可见的。
+await page.locator('[data-album-card]:visible').first().click()
 await page.waitForTimeout(500)
 await shot('20-album-detail-dark')
 
@@ -224,9 +226,9 @@ await goto('艺人')
 await shot('21-artists-dark')
 
 await search('未命名')
-await page.locator('[data-song-row]').first().dblclick()
+await page.locator('[data-song-row]:visible').first().dblclick()
 await page.waitForTimeout(1600)
-await page.locator('button[title="打开全屏正在播放"]').first().click()
+await page.locator('button[title="全屏播放"]:visible').first().click()
 await page.waitForTimeout(1200)
 await shot('22-fullscreen-nolyrics-dark')
 await page.keyboard.press('Escape')
@@ -234,7 +236,7 @@ await page.waitForTimeout(700)
 
 await search('')
 await goto('歌曲')
-await page.locator('[data-song-row]').first().click({ button: 'right' })
+await page.locator('[data-song-row]:visible').first().click({ button: 'right' })
 await page.waitForTimeout(450)
 await shot('23-context-menu-dark')
 await page.keyboard.press('Escape')
@@ -308,21 +310,21 @@ const albumsUnderBar = async () => {
 
 await page.locator('[data-nav="settings"]').click()
 await page.waitForTimeout(300)
-await page.locator('[data-segment="full"]').first().click()
+await page.locator('[data-segment="full"]:visible').first().click()
 await page.waitForTimeout(900)
 await albumsUnderBar()
 const fullBitmap = await captureTop('24-glass-full')
 
 await page.locator('[data-nav="settings"]').click()
 await page.waitForTimeout(400)
-await page.locator('[data-segment="lite"]').first().click()
+await page.locator('[data-segment="lite"]:visible').first().click()
 await page.waitForTimeout(1200)
 await albumsUnderBar()
 const liteBitmap = await captureTop('25-glass-simplified')
 
 await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1280, 800))
 await page.locator('[data-nav="settings"]').click()
-await page.locator('[data-segment="full"]').first().click()
+await page.locator('[data-segment="full"]:visible').first().click()
 await page.waitForTimeout(700)
 
 let changed = 0

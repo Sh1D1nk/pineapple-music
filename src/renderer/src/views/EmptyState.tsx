@@ -12,9 +12,7 @@ export function EmptyState(): JSX.Element {
         <Icon name="music" size={44} />
       </div>
       <div className={styles.emptyTitle}>添加你的音乐</div>
-      <div className={styles.emptyText}>
-        选择一个文件夹。Pinnet 会读取标签、封面与歌词；已入库的歌曲可立即播放。
-      </div>
+      <div className={styles.emptyText}>导入文件夹，即可开始播放。</div>
       <button type="button" className={styles.primaryButton} onClick={() => void bridge.pickFolder()}>
         <Icon name="folderPlus" size={15} />
         选择文件夹…

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useRef, useState, type JSX } from 'react'
+import type { SongMeta } from '@shared/types'
 import { Icon } from './Icon'
 import { Cover } from './Cover'
 import { useStore } from '../state/store'
@@ -14,7 +15,16 @@ import styles from './TopBar.module.css'
  */
 const RemoteContext = createContext(false)
 
-function useTarget(): {
+/**
+ * 控制栏的本地/远端统一入口。
+ *
+ * 性能要点：`playback.position` 每 100ms 更新一次（10Hz）。若这里订阅整个 `playback`
+ * 对象，TransportGroup / VolumeGroup / PanelGroup 等只含按钮的组件也会跟着每秒重渲染 10 次。
+ * 因此全部改成标量订阅，并用 `withProgress` 把进度/时长两条高频订阅「关掉」：
+ * selector 在不需要进度时恒返回 0，Zustand 用 Object.is 判定相等 → 不触发重渲染。
+ * 只有真正显示进度条与时间的 NowPlayingPill / DockTransport 传 withProgress=true。
+ */
+function useTarget(withProgress = false): {
   isRemote: boolean
   playing: boolean
   position: number
@@ -32,7 +42,13 @@ function useTarget(): {
   const remoteFlag = useContext(RemoteContext)
   const connected = useStore((s) => s.netStatus.connected)
   const net = useStore((s) => s.netMusic)
-  const playback = useStore((s) => s.playback)
+  // 标量订阅：各字段独立，只有真正变化的字段才唤醒本组件
+  const pbPlaying = useStore((s) => s.playback.playing)
+  const pbVolume = useStore((s) => s.playback.volume)
+  const pbMuted = useStore((s) => s.playback.muted)
+  const pbHasTrack = useStore((s) => s.playback.queue.length > 0)
+  const pbPosition = useStore((s) => (withProgress ? s.playback.position : 0))
+  const pbDuration = useStore((s) => (withProgress ? s.playback.duration : 0))
   const isRemote = remoteFlag && connected
   const send = (cmd: unknown): void => {
     void window.lm.invoke('netmusic/command', cmd)
@@ -40,12 +56,12 @@ function useTarget(): {
   const live = net.playing ? net.basePositionMs + (performance.now() - net.baseAt) : net.basePositionMs
   return {
     isRemote,
-    playing: isRemote ? net.playing : playback.playing,
-    position: isRemote ? live / 1000 : playback.position,
-    duration: isRemote ? net.durationMs / 1000 : playback.duration,
-    volume: isRemote ? net.volume : playback.volume,
-    muted: isRemote ? net.muted : playback.muted,
-    hasTrack: isRemote ? Boolean(net.track) : playback.queue.length > 0,
+    playing: isRemote ? net.playing : pbPlaying,
+    position: isRemote ? live / 1000 : pbPosition,
+    duration: isRemote ? net.durationMs / 1000 : pbDuration,
+    volume: isRemote ? net.volume : pbVolume,
+    muted: isRemote ? net.muted : pbMuted,
+    hasTrack: isRemote ? Boolean(net.track) : pbHasTrack,
     toggle: () => (isRemote ? send({ type: 'toggle' }) : useStore.getState().togglePlay()),
     next: () => (isRemote ? send({ type: 'next' }) : useStore.getState().next()),
     prev: () => (isRemote ? send({ type: 'prev' }) : useStore.getState().prev()),
@@ -58,7 +74,31 @@ function useTarget(): {
   }
 }
 
-function TransportGroup(): JSX.Element {
+/** 当前曲目的统一取法：本地播放取队列，远端（汽水）取插件状态，包装成同一形状。 */
+function useNowPlayingSong(): { song: SongMeta | undefined; remoteCover: string | null } {
+  const queue = useStore((s) => s.playback.queue)
+  const index = useStore((s) => s.playback.index)
+  const songs = useStore((s) => s.songs)
+  const target = useTarget()
+  const net = useStore((s) => s.netMusic)
+  const item = queue[index]
+  const localSong = item ? songs[item.songId] : undefined
+  const remoteSong = target.isRemote && net.track
+    ? ({
+        id: net.track.id,
+        title: net.track.title,
+        artists: net.track.artists ? net.track.artists.split(' / ') : [],
+        coverId: null,
+        albumKey: '',
+        durationSec: net.durationMs / 1000
+      } as unknown as SongMeta)
+    : undefined
+  const song = target.isRemote ? remoteSong : localSong
+  const remoteCover = target.isRemote ? net.track?.coverUrl ?? null : null
+  return { song, remoteCover }
+}
+
+function TransportButtons(): JSX.Element {
   const target = useTarget()
   const playing = target.playing
   const shuffle = useStore((s) => s.playback.shuffle)
@@ -72,7 +112,7 @@ function TransportGroup(): JSX.Element {
   const remote = target.isRemote
 
   return (
-    <div className={`glass glassFull ${styles.group}`}>
+    <>
       {!remote && (
       <button
         type="button"
@@ -108,11 +148,20 @@ function TransportGroup(): JSX.Element {
         <Icon name={repeat === 'one' ? 'repeatOne' : 'repeat'} size={16} />
         {repeat === 'one' && <span className={styles.badge}>1</span>}
       </button>
+    </>
+  )
+}
+
+function TransportGroup(): JSX.Element {
+  return (
+    <div className={`glass glassFull ${styles.group}`}>
+      <TransportButtons />
     </div>
   )
 }
 
-function VolumeGroup(): JSX.Element {
+/** 静音钮 + 滑杆：顶栏胶囊和底栏共用同一套交互 */
+function VolumeSlider(): JSX.Element {
   const target = useTarget()
   const volume = target.volume
   const muted = target.muted
@@ -142,7 +191,7 @@ function VolumeGroup(): JSX.Element {
   }
 
   return (
-    <div className={`glass glassFull ${styles.group} ${styles.volume}`}>
+    <>
       <button type="button" className={styles.volumeIcon} onClick={toggleMute} title="静音">
         <Icon name={value > 0.45 ? 'volumeHigh' : 'volumeLow'} size={16} />
       </button>
@@ -172,6 +221,15 @@ function VolumeGroup(): JSX.Element {
           <div className={styles.sliderThumb} style={{ left: `${value * 100}%` }} />
         </div>
       </div>
+    </>
+  )
+}
+
+function VolumeGroup(): JSX.Element {
+  const setVolume = useTarget().setVolume
+  return (
+    <div className={`glass glassFull ${styles.group} ${styles.volume}`}>
+      <VolumeSlider />
       <button type="button" className={styles.volumeIcon} onClick={() => setVolume(1)} title="最大音量">
         <Icon name="volumeHigh" size={16} />
       </button>
@@ -179,13 +237,48 @@ function VolumeGroup(): JSX.Element {
   )
 }
 
+function PanelButtons(): JSX.Element {
+  const lyricsOpen = useStore((s) => s.lyricsOpen)
+  const queueOpen = useStore((s) => s.queueOpen)
+  const setLyricsOpen = useStore((s) => s.setLyricsOpen)
+  const setQueueOpen = useStore((s) => s.setQueueOpen)
+
+  return (
+    <>
+      <button
+        type="button"
+        className={`${styles.roundButton} ${lyricsOpen ? styles.active : ''}`}
+        onClick={() => setLyricsOpen(!useStore.getState().lyricsOpen)}
+        title="歌词面板 (Ctrl+L)"
+        aria-pressed={lyricsOpen}
+      >
+        <Icon name="lyrics" size={20} />
+      </button>
+      <button
+        type="button"
+        className={`${styles.roundButton} ${queueOpen ? styles.active : ''}`}
+        onClick={() => setQueueOpen(!queueOpen)}
+        title="待播清单"
+        aria-pressed={queueOpen}
+      >
+        <Icon name="queue" size={20} />
+      </button>
+    </>
+  )
+}
+
+function PanelGroup(): JSX.Element {
+  return (
+    <div className={`glass glassFull ${styles.group} ${styles.panelGroup}`}>
+      <PanelButtons />
+    </div>
+  )
+}
+
 function NowPlayingPill(): JSX.Element {
   const settings = useStore((s) => s.settings)
-  const queue = useStore((s) => s.playback.queue)
-  const index = useStore((s) => s.playback.index)
-  const songs = useStore((s) => s.songs)
-  const target = useTarget()
-  const net = useStore((s) => s.netMusic)
+  const { song, remoteCover } = useNowPlayingSong()
+  const target = useTarget(true)
   const position = target.position
   const duration = target.duration
   const seek = target.seek
@@ -193,22 +286,6 @@ function NowPlayingPill(): JSX.Element {
   const setView = useStore((s) => s.setView)
   const automix = useAutoMix((s) => s.status)
   const automixLevel = useAutoMix((s) => s.level)
-
-  const item = queue[index]
-  const localSong = item ? songs[item.songId] : undefined
-  // 远端模式：把汽水的曲目包装成同一形状，复用封面/标题/歌手的渲染
-  const remoteSong = target.isRemote && net.track
-    ? ({
-        id: net.track.id,
-        title: net.track.title,
-        artists: net.track.artists ? net.track.artists.split(' / ') : [],
-        coverId: null,
-        albumKey: '',
-        durationSec: net.durationMs / 1000
-      } as unknown as (typeof localSong))
-    : undefined
-  const song = target.isRemote ? remoteSong : localSong
-  const remoteCover = target.isRemote ? net.track?.coverUrl ?? null : null
   const [hovering, setHovering] = useState(false)
   const [dragging, setDragging] = useState(false)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -368,32 +445,126 @@ function NowPlayingPill(): JSX.Element {
   )
 }
 
-function PanelGroup(): JSX.Element {
-  const lyricsOpen = useStore((s) => s.lyricsOpen)
-  const queueOpen = useStore((s) => s.queueOpen)
-  const setLyricsOpen = useStore((s) => s.setLyricsOpen)
-  const setQueueOpen = useStore((s) => s.setQueueOpen)
+/* ------------------------------------------------------------------ 传统底栏 */
+/* 一整条连续的实色底栏：左侧「正在播放」、中间「控制 + 进度」、右侧「音量 + 面板」。
+   不复用顶栏的胶囊 grid，内部没有任何分组。起点在侧栏右侧，
+   左下角的「设置」入口不会被遮住。 */
+
+function DockNowPlaying(): JSX.Element {
+  const setFullscreen = useStore((s) => s.setFullscreen)
+  const setView = useStore((s) => s.setView)
+  const { song, remoteCover } = useNowPlayingSong()
+
+  if (!song) {
+    return (
+      <div className={styles.dockEmpty}>
+        <Icon name="music" size={16} />
+        <span>未播放</span>
+      </div>
+    )
+  }
 
   return (
-    <div className={`glass glassFull ${styles.group} ${styles.panelGroup}`}>
+    <>
       <button
         type="button"
-        className={`${styles.roundButton} ${lyricsOpen ? styles.active : ''}`}
-        onClick={() => setLyricsOpen(!useStore.getState().lyricsOpen)}
-        title="歌词面板 (Ctrl+L)"
-        aria-pressed={lyricsOpen}
+        className={styles.dockCoverWrap}
+        onClick={() => setFullscreen(true)}
+        title="全屏播放"
       >
-        <Icon name="lyrics" size={20} />
+        {remoteCover ? (
+          <img className={styles.remoteCoverLarge} src={remoteCover} alt="" draggable={false} referrerPolicy="no-referrer" />
+        ) : (
+          <Cover coverId={song.coverId} size={80} display={44} radius={8} alt={song.title} />
+        )}
+        <span className={styles.coverOverlay}>
+          <Icon name="expand" size={16} />
+        </span>
       </button>
-      <button
-        type="button"
-        className={`${styles.roundButton} ${queueOpen ? styles.active : ''}`}
-        onClick={() => setQueueOpen(!queueOpen)}
-        title="待播清单"
-        aria-pressed={queueOpen}
-      >
-        <Icon name="queue" size={20} />
-      </button>
+      <div className={styles.dockMeta}>
+        <button
+          type="button"
+          className={styles.dockTitle}
+          onClick={() => setFullscreen(true)}
+          title="全屏播放"
+        >
+          <span className="ellipsis">{song.title}</span>
+        </button>
+        <div className={styles.dockSub}>
+          <button
+            type="button"
+            className={styles.link}
+            onClick={() => setView({ kind: 'artist', name: song.artists[0] ?? song.albumArtist })}
+            title={`查看艺人 ${song.artists[0] ?? song.albumArtist}`}
+          >
+            {song.artists.join('、')}
+          </button>
+          <span className={styles.dash}>—</span>
+          <button
+            type="button"
+            className={styles.link}
+            onClick={() => setView({ kind: 'album', key: albumKeyOf(song) })}
+            title={`查看专辑 ${song.album}`}
+          >
+            {song.album}
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function DockTransport(): JSX.Element {
+  const target = useTarget(true)
+  const position = target.position
+  const duration = target.duration
+  const seek = target.seek
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const percent = duration > 0 ? Math.min(100, (position / duration) * 100) : 0
+
+  const seekFrom = (clientX: number): void => {
+    const el = trackRef.current
+    if (!el || duration <= 0) return
+    const rect = el.getBoundingClientRect()
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    seek(ratio * duration)
+  }
+
+  return (
+    <div className={styles.dockCenter}>
+      <div className={styles.dockButtons}>
+        <TransportButtons />
+      </div>
+      <div className={styles.dockProgress}>
+        <span className={styles.dockTime}>{formatTime(position)}</span>
+        <div
+          ref={trackRef}
+          className={`${styles.dockTrack} ${dragging ? styles.dragging : ''}`}
+          onPointerDown={(event) => {
+            event.preventDefault()
+            setDragging(true)
+            event.currentTarget.setPointerCapture(event.pointerId)
+            seekFrom(event.clientX)
+          }}
+          onPointerMove={(event) => {
+            if (dragging) seekFrom(event.clientX)
+          }}
+          onPointerUp={(event) => {
+            setDragging(false)
+            event.currentTarget.releasePointerCapture(event.pointerId)
+          }}
+          role="slider"
+          aria-label="播放进度"
+          aria-valuemin={0}
+          aria-valuemax={Math.round(duration)}
+          aria-valuenow={Math.round(position)}
+          tabIndex={0}
+        >
+          <div className={styles.dockFill} style={{ width: `${percent}%` }} />
+        </div>
+        <span className={styles.dockTime}>{formatRemaining(position, duration)}</span>
+      </div>
     </div>
   )
 }
@@ -403,19 +574,37 @@ export function TopBar({ variant = 'top' }: { variant?: 'top' | 'bottom' }): JSX
   const viewKind = useStore((s) => s.view.kind)
   // 在「网络音乐」页里，这条控制栏整体切到汽水音乐
   const remote = viewKind === 'netmusic'
+  const cssVars = {
+    '--bar-blur': `${settings.barBlur}px`,
+    '--bar-opacity': String(settings.barOpacity),
+    '--bar-cover': String(settings.barCover)
+  } as React.CSSProperties
+
+  // 传统底栏：独立的整条底栏，与顶栏完全分家
+  if (variant === 'bottom') {
+    return (
+      <RemoteContext.Provider value={remote}>
+        <div className={styles.bottomDock} style={cssVars} data-bar-style={settings.barStyle}>
+          {/* 拖拽带让开右缘与下缘 6px，不吃掉系统缩放热区 */}
+          <div className={`dragRegion ${styles.dockDragStrip}`} aria-hidden="true" />
+          <div className={styles.dockLeft}>
+            <DockNowPlaying />
+          </div>
+          <DockTransport />
+          <div className={styles.dockRight}>
+            <div className={styles.dockVolume}>
+              <VolumeSlider />
+            </div>
+            <PanelButtons />
+          </div>
+        </div>
+      </RemoteContext.Provider>
+    )
+  }
+
   return (
     <RemoteContext.Provider value={remote}>
-    <div
-      className={`${styles.bar} ${variant === 'bottom' ? styles.barBottom : ''}`}
-      style={
-        {
-          '--bar-blur': `${settings.barBlur}px`,
-          '--bar-opacity': String(settings.barOpacity),
-          '--bar-cover': String(settings.barCover)
-        } as React.CSSProperties
-      }
-      data-bar-style={settings.barStyle}
-    >
+    <div className={styles.bar} style={cssVars} data-bar-style={settings.barStyle}>
       {/* 拖拽交给背后这条独立的带子：交互元素不在拖拽区里，点击永远不会被合成器吃掉 */}
       <div className={`dragRegion ${styles.dragStrip}`} aria-hidden="true" />
       <div className="noDrag">

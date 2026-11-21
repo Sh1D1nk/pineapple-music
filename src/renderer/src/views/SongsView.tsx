@@ -1,7 +1,7 @@
 import { useMemo, useState, type JSX } from 'react'
 import { useStore, useCurrentSongId, useIsPlaying } from '../state/store'
 import { TrackTable, type SortKey } from '../components/TrackTable'
-import { formatCount, formatDurationLabel } from '../lib/format'
+import { formatSummary } from '../lib/format'
 import { Icon } from '../components/Icon'
 import styles from '../components/views.module.css'
 
@@ -33,7 +33,15 @@ export function SongsView(): JSX.Element {
     })
   }, [songIds, songs, sort])
 
-  const totalDuration = useMemo(() => list.reduce((sum, s) => sum + s.durationSec, 0), [list])
+  const summary = useMemo(
+    () =>
+      formatSummary(
+        list.length,
+        list.reduce((sum, s) => sum + s.durationSec, 0),
+        list.reduce((sum, s) => sum + (s.fileSize || 0), 0)
+      ),
+    [list]
+  )
   const current = useCurrentSongId()
   const playing = useIsPlaying()
 
@@ -42,9 +50,7 @@ export function SongsView(): JSX.Element {
       <div className={styles.header}>
         <div>
           <h1 className="pageTitle">歌曲</h1>
-          <p className="pageSubtitle">
-            {formatCount(list.length)} 首歌曲 · {formatDurationLabel(totalDuration)}
-          </p>
+          <p className="pageSubtitle">{summary}</p>
         </div>
         <div className={styles.headerActions}>
           <button

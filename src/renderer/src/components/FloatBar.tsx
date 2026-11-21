@@ -168,7 +168,7 @@ export function FloatBar(): JSX.Element {
         <button type="button" className={styles.meta} onClick={openFullscreen} title="全屏播放">
           <span className={`${styles.title} ellipsis`}>{title ?? '未播放'}</span>
           <span className={`${styles.artist} ellipsis`}>
-            {artist || (localSong ? localSong.album : '从资料库选择音乐')}
+            {artist || (localSong ? localSong.album : '选择音乐')}
           </span>
         </button>
 

@@ -465,9 +465,14 @@ html[data-vt='1'] .albumBg {
   padding-bottom: 96px;
 }
 
-/* 传统底栏：实色通栏贴底，内容让出高度 */
+/* 传统底栏：实色整条贴底，内容让出高度 */
 [data-control-bar='bottom'] .contentScroll {
   padding-bottom: 92px;
+}
+
+/* 液态玻璃主题 + 传统底栏：导航胶囊上移悬浮，播放底栏贴底，两层叠放 */
+:root[data-nav='bottom'][data-control-bar='bottom'] .contentScroll {
+  padding-bottom: 208px;
 }
 
 /* 液态玻璃主题：导航胶囊在底，播放胶囊浮在其上（两层都是 fixed 浮层）。

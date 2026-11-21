@@ -57,13 +57,13 @@ export function SongInfoDialog(): JSX.Element | null {
     ['专辑', song.album],
     ['专辑艺人', song.albumArtist],
     [
-      '曲目',
+      '歌曲',
       song.trackNo
         ? `${song.trackNo}${song.trackTotal ? ` / ${song.trackTotal}` : ''}`
         : '—'
     ],
     [
-      '碟片',
+      '光盘',
       song.discNo ? `${song.discNo}${song.discTotal ? ` / ${song.discTotal}` : ''}` : '—'
     ],
     ['年份', song.year ? String(song.year) : '—'],

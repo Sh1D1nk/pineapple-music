@@ -65,6 +65,10 @@
   padding: 0 8px;
   border-radius: 8px;
   position: relative;
+  /* 队列可灌满整库：屏幕外的行跳过布局/绘制，尺寸固定 48px 保证滚动条稳定。
+     保留 DOM，拖拽排序不受影响。 */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 48px;
 }
 
 .queueRow:hover {

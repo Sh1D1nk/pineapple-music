@@ -38,6 +38,27 @@ export function formatDurationLabel(totalSeconds: number): string {
   return m === 0 ? `${h} 小时` : `${h} 小时 ${m} 分钟`
 }
 
+/** 汇总行时长：< 60 分钟写「N 分钟」；≥ 60 分钟写「N 小时 M 分钟」（不足 1 分钟按 1 分钟，不显示「秒」） */
+export function formatSummaryDuration(totalSeconds: number): string {
+  const minutes = Math.max(1, Math.round(totalSeconds / 60))
+  if (minutes < 60) return `${minutes} 分钟`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return m === 0 ? `${h} 小时` : `${h} 小时 ${m} 分钟`
+}
+
+/** 汇总行大小：< 1 GB 用 MB（1 位小数）；≥ 1 GB 用 GB（2 位小数）。使用 1024 进制，与系统一致。 */
+export function formatSummarySize(bytes: number): string {
+  const mb = bytes / (1024 * 1024)
+  if (mb < 1024) return `${mb.toFixed(1)} MB`
+  return `${(mb / 1024).toFixed(2)} GB`
+}
+
+/** Apple 风格汇总行：`1 项，3 分钟，7.2 MB` —— 数量、时长、大小一眼看完 */
+export function formatSummary(count: number, totalSeconds: number, totalBytes: number): string {
+  return `${formatCount(count)} 项，${formatSummaryDuration(totalSeconds)}，${formatSummarySize(totalBytes)}`
+}
+
 export function artistsLabel(artists: string[]): string {
   return artists.join('、')
 }

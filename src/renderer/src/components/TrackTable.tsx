@@ -50,7 +50,7 @@ export function TrackTable({
       const current = song.discNo ?? 1
       if (current !== disc) {
         disc = current
-        out.push({ kind: 'disc', label: `碟片 ${current}` })
+        out.push({ kind: 'disc', label: `光盘 ${current}` })
       }
       out.push({ kind: 'song', song })
     }

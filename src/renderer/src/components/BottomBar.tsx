@@ -26,6 +26,26 @@ import styles from './BottomBar.module.css'
  * 关键修正：气泡绘制在 track 之外（track 是横向滚动容器，会把越界的气泡裁掉）。
  */
 
+/** 强调色的 RGB 三元组：从 CSS 变量读取，随浅/深主题切换，避免在 JS 里写死颜色 */
+function useAccentRgb(): [number, number, number] {
+  const theme = useStore((s) => s.settings.theme)
+  const [rgb, setRgb] = useState<[number, number, number]>([10, 132, 255])
+  useEffect(() => {
+    const read = (): void => {
+      const raw = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb')
+      const parts = raw.split(',').map((v) => Number(v.trim()))
+      if (parts.length === 3 && parts.every((n) => Number.isFinite(n))) {
+        setRgb([parts[0]!, parts[1]!, parts[2]!])
+      }
+    }
+    read()
+    // CSS 变量已随 theme 写入 documentElement，这里等一帧再读确保拿到新值
+    const id = window.setTimeout(read, 0)
+    return () => window.clearTimeout(id)
+  }, [theme])
+  return rgb
+}
+
 const NAV: {
   key: 'recent' | 'artists' | 'albums' | 'songs' | 'favorites' | 'coverflow' | 'settings'
   label: string
@@ -77,6 +97,7 @@ export function BottomBar(): JSX.Element {
   const glassMode = useStore((s) => s.settings.glass)
   const playRandom = useStore((s) => s.playRandom)
   const pushToast = useStore((s) => s.pushToast)
+  const accentRgb = useAccentRgb()
 
   const barRef = useRef<HTMLDivElement>(null)
   const pillRef = useRef<HTMLSpanElement>(null)
@@ -440,10 +461,10 @@ export function BottomBar(): JSX.Element {
               const proximity = Math.max(0, Math.min(1, 1 - distance))
               const near = distance < 0.45
               // 原版：lerp(baseColor.copy(alpha=.65), primaryColor, proximity)
-              // base = 白 62%，primary = 主题主色 #fa243c
-              const r = Math.round(255 + (250 - 255) * proximity)
-              const g = Math.round(255 + (36 - 255) * proximity)
-              const b = Math.round(255 + (60 - 255) * proximity)
+              // base = 白 62%，primary = 主题主色（从 --accent-rgb 读取，随主题切换）
+              const r = Math.round(255 + (accentRgb[0] - 255) * proximity)
+              const g = Math.round(255 + (accentRgb[1] - 255) * proximity)
+              const b = Math.round(255 + (accentRgb[2] - 255) * proximity)
               const alpha = 0.62 + 0.38 * proximity
               return (
                 <button

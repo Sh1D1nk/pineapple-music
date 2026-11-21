@@ -109,7 +109,7 @@
 }
 
 .checkbox[data-on='true'] {
-  background: var(--accent, #fa243c);
+  background: var(--accent);
   box-shadow: none;
   color: #fff;
 }
@@ -156,18 +156,18 @@
 
 .alertPrimary {
   color: #fff;
-  background: var(--accent, #fa243c);
-  box-shadow: 0 1px 3px rgba(250, 36, 60, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  background: var(--accent);
+  box-shadow: 0 1px 3px rgba(var(--accent-rgb), 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .alertPrimary:hover {
-  background: var(--accent-hover, #ff3b52);
+  background: var(--accent-hover);
 }
 
 :global([data-theme='light']) .alertPrimary {
   color: #fff;
-  background: var(--accent, #fa243c);
-  box-shadow: 0 1px 3px rgba(250, 36, 60, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  background: var(--accent);
+  box-shadow: 0 1px 3px rgba(var(--accent-rgb), 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 /* ------------------------------------------------------------------ 托盘菜单 */

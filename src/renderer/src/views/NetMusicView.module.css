@@ -146,12 +146,12 @@
 .ctrlMain {
   width: 38px;
   height: 38px;
-  background: var(--accent, #fa243c);
-  box-shadow: 0 4px 14px rgba(250, 36, 60, 0.36);
+  background: var(--accent);
+  box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.36);
 }
 
 .ctrlMain:hover {
-  background: var(--accent-hover, #ff3b52);
+  background: var(--accent-hover);
 }
 
 .slider {

@@ -858,10 +858,10 @@ export function SettingsView(): JSX.Element {
           <Slider value={automix.cacheLimitGB} min={1} max={50} suffix=" GB" onChange={(value) => patchAutomix({ cacheLimitGB: value })} />
         </Row>
         <Row
-          label="当前曲目分轨"
+          label="当前歌曲分轨"
           hint={
             currentStemState === 'ready'
-              ? '当前曲目已分轨，A / B 级过渡可用'
+              ? '当前歌曲已分轨，A / B 级过渡可用'
               : stemsReady
                 ? 'A / B 级需要当前与下一首的分轨；否则固定 C 级'
                 : '无模型时固定 C 级'
@@ -887,7 +887,7 @@ export function SettingsView(): JSX.Element {
         </Row>
         <ModelSection />
         <div className={styles.note}>
-          无模型时固定 C 级；拍点不可靠降至 D 级；同专辑连续曲目 E 级。
+          无模型时固定 C 级；拍点不可靠降至 D 级；同专辑连续歌曲 E 级。
         </div>
         <div className={styles.buttonRow}>
           <button

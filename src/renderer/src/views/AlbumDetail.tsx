@@ -5,7 +5,7 @@ import { PERF_LEGACY } from '../perf/flags'
 import { Cover } from '../components/Cover'
 import { Icon } from '../components/Icon'
 import { TrackTable } from '../components/TrackTable'
-import { formatCount, formatDurationLabel } from '../lib/format'
+import { formatSummary } from '../lib/format'
 import { MORPH_COVER } from '../lib/transition'
 import { coverUrl } from '../bridge'
 import styles from '../components/views.module.css'
@@ -37,7 +37,11 @@ export function AlbumDetail({ albumKey }: Props): JSX.Element {
   const tracks = useMemo(() => (album ? songsOfAlbum(songs, album) : []), [album, songs])
   const current = useCurrentSongId()
   const playing = useIsPlaying()
-  const totalDuration = tracks.reduce((sum, t) => sum + t.durationSec, 0)
+  const summary = formatSummary(
+    tracks.length,
+    tracks.reduce((sum, t) => sum + t.durationSec, 0),
+    tracks.reduce((sum, t) => sum + (t.fileSize || 0), 0)
+  )
 
   if (!album) {
     return (
@@ -66,9 +70,20 @@ export function AlbumDetail({ albumKey }: Props): JSX.Element {
         />
       )}
       <div className={styles.albumHero}>
-        <div className={styles.albumCover} data-open-cover style={{ viewTransitionName: MORPH_COVER }}>
-          {/* 详情页大图就是过渡形变的目标帧：必须 eager 立即解码，否则形变动画里它还是灰块 */}
-          <Cover coverId={album.coverId} size={640} radius={10} alt={album.name} priority />
+        <div className={styles.albumCoverWrap}>
+          {/* 封面微光：从 80px 缩图取的静态光晕，只在页面内、不参与形变和交互。
+              灰度/黑白封面天然没有饱和度 → 自动退化为中性灰光，不会出现脏色。 */}
+          {album.coverId && (
+            <div
+              className={styles.coverGlow}
+              style={{ backgroundImage: `url(${coverUrl(album.coverId, 80)})` }}
+              aria-hidden="true"
+            />
+          )}
+          <div className={styles.albumCover} data-open-cover style={{ viewTransitionName: MORPH_COVER }}>
+            {/* 详情页大图就是过渡形变的目标帧：必须 eager 立即解码，否则形变动画里它还是灰块 */}
+            <Cover coverId={album.coverId} size={640} radius={14} alt={album.name} priority />
+          </div>
         </div>
         <div className={styles.albumMeta}>
           <div className={styles.albumTitle}>{album.name}</div>
@@ -121,9 +136,7 @@ export function AlbumDetail({ albumKey }: Props): JSX.Element {
         }}
       />
 
-      <div className={styles.albumFooter}>
-        {formatCount(tracks.length)} 首歌曲，{formatDurationLabel(totalDuration)}
-      </div>
+      <div className={styles.albumFooter}>{summary}</div>
     </div>
   )
 }

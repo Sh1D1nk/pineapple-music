@@ -291,10 +291,10 @@
   border-radius: 50%;
   cursor: pointer;
   color: #fff;
-  background: rgba(250, 36, 60, 0.75);
+  background: rgba(var(--accent-rgb), 0.82);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 4px 12px rgba(250, 36, 60, 0.28);
+    0 4px 12px rgba(var(--accent-rgb), 0.28);
   transition: transform 160ms var(--ease), filter 160ms ease;
 }
 
@@ -311,7 +311,7 @@
   filter: brightness(1.16) saturate(1.1);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    0 6px 18px rgba(250, 36, 60, 0.45);
+    0 6px 18px rgba(var(--accent-rgb), 0.45);
 }
 
 /* 视口窄时优先保住胶囊：圆按钮组收窄 */

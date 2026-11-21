@@ -66,6 +66,12 @@ export function LyricsView({
     let raf = 0
     let last = -1
     const loop = (): void => {
+      // 窗口不可见时不喂时间：AMLL 的逐字动画与 WebGL 在后台无需继续推进，
+      // 恢复可见后下一帧会按真实播放位置自动对齐（jump 判定 > 900ms）。
+      if (document.hidden) {
+        raf = requestAnimationFrame(loop)
+        return
+      }
       const player = ref.current?.lyricPlayer
       if (player) {
         const seconds = engine.snapshot().position

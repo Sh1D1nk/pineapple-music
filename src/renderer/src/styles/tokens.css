@@ -5,18 +5,27 @@
   --font-ui: 'SF Pro Text', 'SF Pro Display', 'PingFang SC', 'Segoe UI Variable Text', 'Segoe UI',
     'Microsoft YaHei UI', system-ui, sans-serif;
 
-  --accent: #fa243c;
-  --accent-hover: #ff3b52;
-  --accent-active: #e01e34;
-  --accent-soft: rgba(250, 36, 60, 0.12);
+  /* 强调色唯一事实来源：Apple 系统蓝。浅色 #007AFF / 深色 #0A84FF，
+     具体值在 [data-theme] 下覆盖；这里放深色值作兜底（液态主题恒为深色）。
+     需要 rgba 时统一用 --accent-rgb，避免再写死一份颜色。 */
+  --accent: #0a84ff;
+  --accent-hover: #3b9eff;
+  --accent-active: #0060df;
+  --accent-soft: rgba(10, 132, 255, 0.14);
+  --accent-rgb: 10, 132, 255;
   --on-accent: #ffffff;
+  /* 语义警告色：与品牌强调色分开，改主题色时不受影响 */
+  --warn: #ff453a;
 
   --radius-thumb: 4px;
-  --radius-row: 12px;
+  /* 圆角成套：封面边长约 5%（232px → 约 14px）、曲目行 10px、卡片 12px。
+     想整体微调圆角，只改这三个变量即可。 */
+  --radius-cover: 14px;
+  --radius-row: 10px;
   /* 侧栏当前栏目的高亮块：浅色下必须是一层可见的灰，不能是白色 */
   --nav-thumb: rgba(0, 0, 0, 0.075);
   --nav-thumb-stroke: rgba(0, 0, 0, 0.06);
-  --radius-card: 8px;
+  --radius-card: 12px;
   --radius-panel: 22px;
   --radius-menu: 16px;
   --radius-modal: 24px;
@@ -39,16 +48,22 @@
 :root[data-theme='light'] {
   color-scheme: light;
 
+  --accent: #007aff;
+  --accent-hover: #0067e0;
+  --accent-active: #0056c4;
+  --accent-soft: rgba(0, 122, 255, 0.12);
+  --accent-rgb: 0, 122, 255;
+
   --bg-content: #ffffff;
   --bg-elevated: #fbfbfd;
   --text-primary: #1d1d1f;
   --text-secondary: rgba(60, 60, 67, 0.6);
   --text-tertiary: rgba(60, 60, 67, 0.3);
-  --separator: rgba(0, 0, 0, 0.08);
+  --separator: rgba(0, 0, 0, 0.06);
   --hover: rgba(0, 0, 0, 0.04);
   --selected: rgba(0, 0, 0, 0.08);
   --selected-strong: rgba(255, 255, 255, 0.55);
-  --zebra: rgba(0, 0, 0, 0.025);
+  --zebra: rgba(0, 0, 0, 0.012);
   --glass-tint: rgba(252, 252, 253, 0.66);
   --glass-tint-strong: rgba(255, 255, 255, 0.78);
   --glass-stroke: rgba(255, 255, 255, 0.85);
@@ -67,6 +82,12 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
+  --accent: #0a84ff;
+  --accent-hover: #3b9eff;
+  --accent-active: #0060df;
+  --accent-soft: rgba(10, 132, 255, 0.14);
+  --accent-rgb: 10, 132, 255;
+
   --nav-thumb: rgba(255, 255, 255, 0.13);
   --nav-thumb-stroke: rgba(255, 255, 255, 0.08);
   --bg-content: #1f1f21;
@@ -74,11 +95,11 @@
   --text-primary: #ffffff;
   --text-secondary: rgba(235, 235, 245, 0.6);
   --text-tertiary: rgba(235, 235, 245, 0.3);
-  --separator: rgba(255, 255, 255, 0.1);
+  --separator: rgba(255, 255, 255, 0.07);
   --hover: rgba(255, 255, 255, 0.06);
   --selected: rgba(255, 255, 255, 0.12);
   --selected-strong: rgba(255, 255, 255, 0.14);
-  --zebra: rgba(255, 255, 255, 0.03);
+  --zebra: rgba(255, 255, 255, 0.014);
   --glass-tint: rgba(28, 28, 31, 0.46);
   --glass-tint-strong: rgba(28, 28, 30, 0.46);
   --glass-stroke: rgba(255, 255, 255, 0.14);

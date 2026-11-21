@@ -1,6 +1,6 @@
 import { useMemo, type JSX } from 'react'
 import { useStore, useCurrentSongId, useIsPlaying } from '../state/store'
-import { buildAlbums, songsOfAlbum } from '../lib/group'
+import { albumsOf, songsOfAlbum } from '../lib/group'
 import { TrackTable } from '../components/TrackTable'
 import { Cover } from '../components/Cover'
 import { Icon } from '../components/Icon'
@@ -22,11 +22,8 @@ export function FavoritesView(): JSX.Element {
   const setContextMenu = useStore((s) => s.setContextMenu)
   const toggleFavoriteAlbum = useStore((s) => s.toggleFavoriteAlbum)
 
-  const allSongs = useMemo(
-    () => songIds.map((id) => songs[id]).filter((s): s is NonNullable<typeof s> => Boolean(s)),
-    [songIds, songs]
-  )
-  const albums = useMemo(() => buildAlbums(allSongs), [allSongs])
+  // 走跨挂载 WeakMap 缓存：进入收藏页不再把整个曲库重新聚合一遍
+  const albums = useMemo(() => albumsOf(songs, songIds), [songs, songIds])
 
   const favoriteSongs = useMemo(
     () => favorites.songs.map((id) => songs[id]).filter((s): s is NonNullable<typeof s> => Boolean(s)),
@@ -52,9 +49,7 @@ export function FavoritesView(): JSX.Element {
             <Icon name="star" size={40} />
           </div>
           <div className={styles.emptyTitle}>还没有收藏</div>
-          <div className={styles.emptyText}>
-            在任意歌曲上点右键选择「收藏」，或在专辑卡片上点星标；收藏会存进本地，重开应用依然在。
-          </div>
+          <div className={styles.emptyText}>右键歌曲或点专辑星标即可收藏。</div>
         </div>
       </div>
     )

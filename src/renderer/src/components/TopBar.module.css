@@ -210,6 +210,8 @@
 .playButton,
 .iconButton,
 .roundButton,
+.dockTitle,
+.dockSub,
 .searchField {
   -webkit-app-region: no-drag;
 }
@@ -444,30 +446,189 @@
 }
 
 
-/* ------------------------------------------------------------------ 传统底栏变体 */
-/* 把整条控制栏从顶部搬到窗口底部：内容仍是同一棵 DOM，只是换定位与留白 */
-.barBottom {
+/* ------------------------------------------------------------------ 传统底栏 */
+/* 一整条连续的实色底栏：左「正在播放」、中「控制 + 进度」、右「音量 + 面板」。
+   不复用顶栏的胶囊 grid，内部没有任何分组；起点在侧栏右侧，
+   左下角的「设置」入口不会被遮挡。 */
+.bottomDock {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  top: auto;
+  left: calc(var(--sidebar-w) + 8px);
+  right: 8px;
+  bottom: 8px;
   height: 64px;
-  padding: 0 16px;
-  border-radius: 0;
+  border-radius: 12px;
   background: var(--bg-content);
   box-shadow:
-    0 -1px 0 var(--separator),
-    0 -12px 32px rgba(0, 0, 0, 0.22);
+    0 0 0 1px var(--separator),
+    0 12px 32px rgba(0, 0, 0, 0.28);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  padding: 0 14px;
   z-index: 45;
 }
 
-/* 传统底栏是「实色通栏」：里面的胶囊不再做玻璃，避免一条实色带里浮着几块半透明 */
-.barBottom :global(.glass) {
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: none;
+/* 拖拽带让开右缘与下缘 6px：drag 的命中测试（HTCAPTION）优先于系统缩放热区 */
+.dockDragStrip {
+  position: absolute;
+  inset: 0 6px 6px 6px;
+  z-index: 0;
+  pointer-events: auto;
+  -webkit-app-region: drag;
+}
+
+.bottomDock > *:not(.dockDragStrip) {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+/* 液态玻璃主题没有侧栏：底栏横贯整个窗口 */
+:global([data-nav='bottom']) .bottomDock {
+  left: 8px;
+}
+
+.dockLeft {
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.dockEmpty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.dockCoverWrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+
+.remoteCoverLarge {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  display: block;
+}
+
+.dockMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dockTitle {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: left;
+}
+
+.dockTitle span {
+  display: block;
+}
+
+.dockSub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dockSub .link {
+  max-width: 180px;
+}
+
+.dockCenter {
+  justify-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: min(520px, 100%);
+  min-width: 0;
+}
+
+.dockButtons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.dockProgress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.dockTime {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.dockTrack {
+  position: relative;
+  flex: 1 1 auto;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  transition: height var(--dur) var(--ease);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.dockTrack:hover,
+.dockTrack.dragging {
+  height: 5px;
+}
+
+.dockFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: var(--text-primary);
+}
+
+.dockRight {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dockVolume {
+  width: 120px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 
 

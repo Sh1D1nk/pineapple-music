@@ -35,9 +35,12 @@ function drawPlan(canvas: HTMLCanvasElement, plan: TransitionPlan): void {
   }
 
   const accent = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#fff'
+  // 图表曲线跟随主题强调色，不再写死品牌红
+  const accentRgb = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim() || '10, 132, 255'
+  const curve = (alpha: number): string => `rgba(${accentRgb},${alpha})`
 
   // bass swap marker
-  ctx.strokeStyle = 'rgba(250,36,60,.55)'
+  ctx.strokeStyle = curve(0.55)
   ctx.setLineDash([3, 3])
   ctx.beginPath()
   ctx.moveTo(x(plan.bassSwapAt), 12)
@@ -58,12 +61,12 @@ function drawPlan(canvas: HTMLCanvasElement, plan: TransitionPlan): void {
     ctx.stroke()
   }
 
-  plot(plan.currentGain, 'rgba(250,36,60,.9)')
+  plot(plan.currentGain, curve(0.9))
   plot(plan.nextGain, 'rgba(80,180,255,.9)')
   plot(plan.rate.map((k) => ({ at: k.at, value: (k.value - 1) * 8 + 0.5 })), 'rgba(255,200,60,.9)')
 
   if (plan.vocalOut) {
-    ctx.fillStyle = 'rgba(250,36,60,.12)'
+    ctx.fillStyle = curve(0.12)
     ctx.fillRect(x(plan.vocalOut.start), 12, Math.max(2, x(plan.vocalOut.end) - x(plan.vocalOut.start)), height - 32)
   }
 
@@ -71,7 +74,7 @@ function drawPlan(canvas: HTMLCanvasElement, plan: TransitionPlan): void {
   ctx.font = '10px system-ui'
   ctx.fillText(`0:00`, 10, height - 6)
   ctx.fillText(`${duration.toFixed(0)}s`, width - 32, height - 6)
-  ctx.fillStyle = 'rgba(250,36,60,.9)'
+  ctx.fillStyle = curve(0.9)
   ctx.fillText('当前增益', 14, 16)
   ctx.fillStyle = 'rgba(80,180,255,.9)'
   ctx.fillText('下一首增益', 70, 16)
@@ -222,7 +225,7 @@ export function TransitionLab(): JSX.Element {
       <div className={styles.labGrid}>
         <label>
           <div className={styles.statLabel} style={{ marginBottom: 4 }}>
-            当前曲目
+            当前歌曲
           </div>
           <select className={styles.labSelect} value={aId} onChange={(event) => setAId(event.target.value)}>
             <option value="">选择…</option>

@@ -52,8 +52,8 @@
 .fake {
   padding: 1px 6px;
   border-radius: 6px;
-  background: rgba(250, 36, 60, 0.14);
-  color: #fa243c;
+  background: rgba(var(--accent-rgb), 0.14);
+  color: var(--accent);
   font-size: 10px;
   font-weight: 500;
 }
@@ -70,7 +70,7 @@
   padding: 0 12px;
   border: 0;
   border-radius: 15px;
-  background: #fa243c;
+  background: var(--accent);
   color: #fff;
   font: inherit;
   font-size: 12px;
