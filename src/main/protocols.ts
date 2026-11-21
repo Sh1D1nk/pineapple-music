@@ -1,4 +1,5 @@
 import { createReadStream, existsSync, statSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { protocol } from 'electron'
 import { join } from 'node:path'
@@ -33,6 +34,35 @@ export function registerSchemes(): void {
   ])
 }
 
+/**
+ * 封面内存缓存：缩略图是内容寻址的（id_size），不会变。
+ * 之前每次滚动/切页都现读盘，几百张封面会把磁盘队列和主进程一起拖慢，
+ * 间接让 amsong 的音频分片排在后面（表现为「点播放要等一下才出声」）。
+ */
+const COVER_CACHE_LIMIT = 96 * 1024 * 1024
+const coverCache = new Map<string, Buffer>()
+let coverBytes = 0
+
+async function readCoverCached(file: string): Promise<Buffer> {
+  const hit = coverCache.get(file)
+  if (hit) {
+    coverCache.delete(file)
+    coverCache.set(file, hit)
+    return hit
+  }
+  const data = await readFile(file)
+  coverCache.set(file, data)
+  coverBytes += data.length
+  while (coverBytes > COVER_CACHE_LIMIT) {
+    const oldest = coverCache.keys().next().value
+    if (!oldest) break
+    const evicted = coverCache.get(oldest)
+    coverCache.delete(oldest)
+    coverBytes -= evicted?.length ?? 0
+  }
+  return data
+}
+
 function mimeFor(path: string): string {
   if (path.endsWith('.png')) return 'image/png'
   if (path.endsWith('.webp')) return 'image/webp'
@@ -51,7 +81,7 @@ export function registerProtocols(library: LibraryService): void {
     }
     const file = join(coversDir(), id.slice(0, 2), `${id}_${size}.jpg`)
     if (!existsSync(file)) return new Response('not found', { status: 404 })
-    const data = await import('node:fs/promises').then((m) => m.readFile(file))
+    const data = await readCoverCached(file)
     return new Response(new Uint8Array(data), {
       status: 200,
       headers: {

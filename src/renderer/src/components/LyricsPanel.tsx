@@ -7,6 +7,7 @@ import { LyricsView, withDisplayOptions } from './LyricsView'
 import { engine } from '../audio/engine'
 import styles from './overlays.module.css'
 import { useOpenPaint } from '../perf/react'
+import { hasRealLyrics, payloadHasLyrics } from '../lib/lyrics'
 
 export function LyricsPanel(): JSX.Element {
   const open = useStore((s) => s.lyricsOpen)
@@ -41,6 +42,8 @@ export function LyricsPanel(): JSX.Element {
     if (!lyricsForCurrent || lyricsForCurrent.kind !== 'synced') return []
     return withDisplayOptions(lyricsForCurrent.lines, settings.showTranslation, settings.showRoman)
   }, [lyricsForCurrent, settings.showTranslation, settings.showRoman])
+  // 纯音乐 / 无歌词：面板收成一张「正在播放」小卡，歌词区域和占位提示都不渲染
+  const hasLyrics = payloadHasLyrics(lyricsForCurrent) && (lines.length === 0 || hasRealLyrics(lines))
 
   const perfLow = useStore((s) => s.perfLow)
   const quality = settings.backgroundQuality
@@ -53,6 +56,7 @@ export function LyricsPanel(): JSX.Element {
   return (
     <div
       className={`${styles.panel} ${styles.lyricsPanel} ${open ? styles.panelOpen : ''}`}
+      data-empty={hasLyrics ? 'false' : 'true'}
       aria-hidden={!open}
       inert={!open}
       style={{ pointerEvents: open ? 'auto' : 'none' }}
@@ -98,11 +102,12 @@ export function LyricsPanel(): JSX.Element {
         <div className={styles.lyricsHeader}>
           <Cover coverId={song?.coverId ?? null} size={80} display={40} radius={10} alt="" />
           <div className={styles.lyricsHeaderText}>
-            <div className={`${styles.lyricsHeaderTitle} ellipsis`}>{song?.title ?? '未在播放'}</div>
+            <div className={`${styles.lyricsHeaderTitle} ellipsis`}>{song?.title ?? '未播放'}</div>
             <div className={`${styles.lyricsHeaderArtist} ellipsis`}>{song?.artists.join('、') ?? ''}</div>
           </div>
         </div>
 
+        {hasLyrics && (
         <div className={styles.lyricsBody}>
           {lyricsForCurrent && lyricsForCurrent.kind === 'synced' && lines.length > 0 ? (
             <LyricsView
@@ -139,13 +144,9 @@ export function LyricsPanel(): JSX.Element {
             >
               {lyricsForCurrent.plain}
             </div>
-          ) : (
-            <div className={styles.lyricsEmpty}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: '#fff' }}>暂无歌词</div>
-              <div>把同名 .lrc 文件放在歌曲旁边即可自动加载</div>
-            </div>
-          )}
+          ) : null}
         </div>
+        )}
       </div>
       )}
     </div>

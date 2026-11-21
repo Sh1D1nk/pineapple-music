@@ -366,7 +366,7 @@ export function BottomBar(): JSX.Element {
 
   const onRandom = (): void => {
     if (songIds.length === 0) {
-      pushToast('曲库还是空的，先添加一些音乐吧')
+      pushToast('资料库为空，先添加音乐')
       return
     }
     playRandom()
@@ -479,7 +479,7 @@ export function BottomBar(): JSX.Element {
         className={styles.random}
         ref={randomRef}
         onClick={onRandom}
-        title="随机挑一首歌播放"
+        title="随机播放"
         aria-label="随机推荐"
       >
         <Icon name="sparkles" size={20} />

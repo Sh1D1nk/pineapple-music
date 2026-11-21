@@ -43,7 +43,20 @@ export function VirtualGrid<T>({ items, renderItem, min = 190, gap = 24, offset 
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(host)
-    return () => ro.disconnect()
+    // 页面保活用 visibility 隐藏：尺寸不变，ResizeObserver 不会触发。
+    // 但隐藏期间量到的 top / 列宽可能是过渡态，切回来必须重算一次，
+    // 否则首行会停在半空（看起来像一块莫名其妙的空白）。
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) requestAnimationFrame(measure)
+      },
+      { threshold: 0.01 }
+    )
+    io.observe(host)
+    return () => {
+      ro.disconnect()
+      io.disconnect()
+    }
   }, [gap, min])
 
   const rows = Math.ceil(items.length / cols)
@@ -67,7 +80,9 @@ export function VirtualGrid<T>({ items, renderItem, min = 190, gap = 24, offset 
 
   return (
     <div ref={hostRef} className={styles.host}>
-      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+      {/* scrollMargin 已经包含在 row.start 里；容器本身就在 host 位置，
+          所以行偏移要减掉它，高度也要减掉它，否则整块网格会被推下去两次。 */}
+      <div style={{ height: Math.max(0, virtualizer.getTotalSize() - top), position: 'relative' }}>
         {virtualRows.map((virtualRow) => {
           const start = virtualRow.index * cols
           const rowItems = items.slice(start, start + cols)
@@ -78,7 +93,7 @@ export function VirtualGrid<T>({ items, renderItem, min = 190, gap = 24, offset 
               ref={virtualizer.measureElement}
               className={styles.row}
               style={{
-                transform: `translateY(${virtualRow.start}px)`,
+                transform: `translateY(${virtualRow.start - top}px)`,
                 gridTemplateColumns: `repeat(${cols}, ${Math.round(colW)}px)`,
                 columnGap: gap
               }}

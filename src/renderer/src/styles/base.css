@@ -440,10 +440,6 @@ html[data-vt='1'] .albumBg {
 
 
 /* 播放控制栏在底部时，滚动区底部留出高度（64 播放条 + 8 间隙） */
-[data-control-bar='bottom'] .contentScroll {
-  padding-bottom: 72px;
-}
-
 /* ---------------------------------------------------------------- 页面保活 */
 
 /* 缓存下来的页面留在 DOM 里（封面解码、列表虚拟化状态、滚动位置都不丢）。
@@ -473,6 +469,12 @@ html[data-vt='1'] .albumBg {
 /* 传统底栏：实色通栏贴底，内容让出高度 */
 [data-control-bar='bottom'] .contentScroll {
   padding-bottom: 92px;
+}
+
+/* 液态玻璃主题：导航胶囊在底，播放胶囊浮在其上（两层都是 fixed 浮层）。
+   内容区要让出「导航 70 + 间距 12 + 播放 64 + 底距」的总高度。 */
+:root[data-nav='bottom'][data-control-bar='float'] .contentScroll {
+  padding-bottom: 208px;
 }
 
 

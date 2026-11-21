@@ -4,14 +4,22 @@
 
 .wrap {
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 50%;
   bottom: 14px;
+  width: min(860px, calc(100vw - 48px));
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 8px;
   pointer-events: none;
-  z-index: 6;
+  z-index: 7;
+}
+
+/* 液态玻璃主题：导航胶囊占最底部，播放胶囊上浮一层，两者同宽对齐。
+   规则写死在这里（而不是靠 z-index 抢位），重叠就不可能发生。 */
+:global([data-nav='bottom']) .wrap {
+  bottom: 100px;
+  width: min(720px, calc(100vw - 32px));
 }
 
 .capsule {
@@ -26,19 +34,30 @@
   border-radius: 32px;
   pointer-events: auto;
   /* 表面着色保证可读性：浅色半透明白 / 深色半透明炭黑 */
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.62);
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.72),
     inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  /* 胶囊比其它小玻璃更「厚」：多 8px 模糊，压住背后的封面纹理，文字才稳 */
+  backdrop-filter: saturate(1.45) blur(10px) var(--hyalite, blur(4px));
+  -webkit-backdrop-filter: saturate(1.45) blur(10px) var(--hyalite, blur(4px));
   transform: scale(var(--press-x, 1), var(--press-y, 1));
   transform-origin: center center;
   will-change: transform;
   user-select: none;
 }
 
+:global([data-theme='light']) .capsule {
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
 :global([data-theme='dark']) .capsule {
-  background: rgba(28, 28, 30, 0.45);
+  background: rgba(22, 22, 24, 0.55);
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.24),

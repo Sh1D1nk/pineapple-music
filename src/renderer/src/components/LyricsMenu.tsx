@@ -73,7 +73,7 @@ export function LyricsMenu(): JSX.Element | null {
     if (!song) {
       return [
         [
-          { id: 'noSong', label: '未在播放', disabled: true, run: () => undefined },
+          { id: 'noSong', label: '未播放', disabled: true, run: () => undefined },
           { id: 'settings', label: '歌词页设置…', run: () => setLyricsSettingsOpen(true) }
         ]
       ]

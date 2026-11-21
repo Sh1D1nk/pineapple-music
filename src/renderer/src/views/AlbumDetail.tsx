@@ -59,10 +59,9 @@ export function AlbumDetail({ albumKey }: Props): JSX.Element {
       {album.coverId && (
         <div
           className={styles.albumBg}
-          // 80px 档放大即可：它本来就只是一层被压暗的氛围色块。
-          // 之前用 240 档 + blur(28px) 在整屏面积上做高斯模糊，是「点开专辑」最大的
-          // 一次光栅化（iGPU 上 100ms 级）——小图放大观感一致，成本几乎为零。
-          style={{ backgroundImage: `url(${coverUrl(album.coverId, 80)})` }}
+          // 240 档 + 蒙层：不用整屏 blur(28px)（那是点开专辑最大的一次光栅化），
+          // 也不用 80 档（放大后能看出方块）。240 放大只做采样，成本几乎为零。
+          style={{ backgroundImage: `url(${coverUrl(album.coverId, 240)})` }}
           aria-hidden="true"
         />
       )}
@@ -80,9 +79,11 @@ export function AlbumDetail({ albumKey }: Props): JSX.Element {
           >
             {album.artist}
           </button>
-          <div className={styles.albumSub}>
-            {[album.genre, album.year ? String(album.year) : null].filter(Boolean).join(' · ') || '未知流派'}
-          </div>
+          {[album.genre, album.year ? String(album.year) : null].filter(Boolean).length > 0 && (
+            <div className={styles.albumSub}>
+              {[album.genre, album.year ? String(album.year) : null].filter(Boolean).join(' · ')}
+            </div>
+          )}
           <div className={styles.albumButtons}>
             <button
               type="button"

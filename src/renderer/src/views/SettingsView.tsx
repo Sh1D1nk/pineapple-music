@@ -270,7 +270,7 @@ function ModelSection(): JSX.Element {
               ? '等待播放与队列中出现下一首'
               : status && status.files.length > 0
                 ? `分轨模型不兼容：${status.rejected[0]?.reason ?? '签名不支持'}；现在固定走 C 级`
-                : '未安装分轨模型：现在固定走 C 级，装好后可升到 A / B 级')
+                : '未安装模型：当前 C 级，安装后可升至 A / B 级')
         }
       >
         <span className={styles.statValue} style={{ fontSize: 15 }}>
@@ -315,7 +315,7 @@ function ModelSection(): JSX.Element {
               refresh()
             } else if (result.reason && result.reason !== 'canceled') {
               setImportError({ reason: result.reason, expected: result.expected, actual: result.actual })
-              pushToast('模型签名不兼容，详见下方原因')
+              pushToast('模型不兼容，详见原因')
             }
           }}
         >
@@ -404,7 +404,7 @@ export function SettingsView(): JSX.Element {
             onChange={(theme) => void update({ theme })}
           />
         </Row>
-        <Row label="关闭窗口时" hint="「后台播放」关窗口不停音乐，托盘图标留在系统里；「直接退出」不弹确认">
+        <Row label="关闭窗口时" hint="后台播放：关闭窗口后继续播放。直接退出：不再询问。">
           <Segmented
             value={settings.closeBehavior}
             options={[
@@ -415,7 +415,7 @@ export function SettingsView(): JSX.Element {
             onChange={(closeBehavior) => void update({ closeBehavior })}
           />
         </Row>
-        <Row label="播放控制位置" hint="悬浮玻璃底栏：封面/歌名/上一首/播放/下一首/进度 + 歌词与待播圆按钮；传统底栏是实色通栏；顶栏是旧布局">
+        <Row label="播放控制位置" hint="悬浮：玻璃胶囊浮于内容之上；传统：实色通栏；顶栏：旧版布局。">
           <Segmented
             value={settings.controlBar}
             options={[
@@ -426,10 +426,10 @@ export function SettingsView(): JSX.Element {
             onChange={(controlBar) => void update({ controlBar })}
           />
         </Row>
-        <Row label="页面转场动画" hint="开：点专辑/艺人时封面形变 + 整页交叉淡入（原生 View Transition，集显上约 80ms 快照成本）；关：点开即出">
+        <Row label="页面转场动画" hint="开：封面形变与整页淡入；关：点开即出。">
           <Switch value={settings.pageTransition} onChange={(pageTransition) => void update({ pageTransition })} />
         </Row>
-        <Row label="性能模式" hint="自动：按实测帧耗时在玻璃/歌词模糊/背景采样之间降级；开：强制省电档（含关闭页面转场）；关：全开">
+        <Row label="性能模式" hint="自动按实测帧耗时降级；开：省电优先；关：全效果。">
           <Segmented
             value={settings.performanceMode}
             options={[
@@ -440,7 +440,7 @@ export function SettingsView(): JSX.Element {
             onChange={(performanceMode) => void update({ performanceMode })}
           />
         </Row>
-        <Row label="后台处理" hint="「空闲时」= 最近 1.5 秒没有鼠标/键盘/滚动输入才跑分析或分轨；有输入立即停在歌与歌之间">
+        <Row label="后台处理" hint="无操作 1.5 秒后处理；一旦操作即暂停。">
           <Segmented
             value={settings.backgroundProcessing}
             options={[
@@ -670,11 +670,11 @@ export function SettingsView(): JSX.Element {
             }
           />
         </Row>
-        <Row label="自动回退" hint="当前来源取不到歌词时自动换下一个来源">
+        <Row label="自动回退" hint="当前来源不可用时自动切换">
           <Switch value={settings.lyricAutoFallback} onChange={(value) => void update({ lyricAutoFallback: value })} />
         </Row>
         <div className={styles.note}>
-          外挂来源支持 .lrc / .ttml / .lys / .yrc / .qrc；内嵌来源读取 SYLT / USLT / ©lyr / LYRICS；纯文本按静态列表显示。
+          支持 .lrc / .ttml / .lys / .yrc / .qrc 与内嵌标签。
         </div>
       </section>
 
@@ -863,8 +863,8 @@ export function SettingsView(): JSX.Element {
             currentStemState === 'ready'
               ? '当前曲目已分轨，A / B 级过渡可用'
               : stemsReady
-                ? 'A / B 级过渡需要「当前 + 下一首」的分轨；没有分轨时固定走 C 级（整曲节拍对齐）'
-                : '没有可用模型时固定走 C 级（整曲节拍对齐 + 低频交换）'
+                ? 'A / B 级需要当前与下一首的分轨；否则固定 C 级'
+                : '无模型时固定 C 级'
           }
         >
           <button
@@ -887,8 +887,7 @@ export function SettingsView(): JSX.Element {
         </Row>
         <ModelSection />
         <div className={styles.note}>
-          没有分轨模型时，AutoMix 走 C 级（整曲节拍对齐 + 低频交换）；拍点不可靠才降到 D 级（等功率交叉淡化），同专辑连续曲目走 E 级无缝。
-          降级全程不影响正常播放。
+          无模型时固定 C 级；拍点不可靠降至 D 级；同专辑连续曲目 E 级。
         </div>
         <div className={styles.buttonRow}>
           <button

@@ -240,7 +240,7 @@ function NowPlayingPill(): JSX.Element {
           setFullscreen(true)
         }
       }}
-      title={song ? '打开全屏歌词' : undefined}
+      title={song ? '全屏播放' : undefined}
       style={{ cursor: song ? 'pointer' : 'default' }}
     >
       {song ? (
@@ -264,7 +264,7 @@ function NowPlayingPill(): JSX.Element {
               event.stopPropagation()
               setFullscreen(true)
             }}
-            title="打开全屏正在播放"
+            title="全屏播放"
           >
             {remoteCover ? (
               <img className={styles.remoteCover} src={remoteCover} alt="" draggable={false} referrerPolicy="no-referrer" />
@@ -283,7 +283,7 @@ function NowPlayingPill(): JSX.Element {
                 event.stopPropagation()
                 setFullscreen(true)
               }}
-              title="打开全屏正在播放"
+              title="全屏播放"
             >
               <span className={`${styles.title} ellipsis`}>{song.title}</span>
             </button>
@@ -361,7 +361,7 @@ function NowPlayingPill(): JSX.Element {
       ) : (
         <div className={styles.emptyNow}>
           <Icon name="music" size={16} />
-          <span>未在播放</span>
+          <span>未播放</span>
         </div>
       )}
     </div>

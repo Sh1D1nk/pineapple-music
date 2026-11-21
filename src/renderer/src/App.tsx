@@ -492,13 +492,13 @@ export function App(): JSX.Element {
         {dragActive && (
           <div className={styles.dropOverlay}>
             <Icon name="folderPlus" size={34} />
-            松开以导入音乐
+            导入音乐
           </div>
         )}
 
         {!ready && (
           <div className={overlayStyles.scrim} style={{ backdropFilter: 'none' }}>
-            <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>正在载入资料库…</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>正在载入资料库</div>
           </div>
         )}
       </div>

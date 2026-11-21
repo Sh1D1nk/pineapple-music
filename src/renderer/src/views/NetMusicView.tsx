@@ -87,9 +87,9 @@ export function NetMusicView(): JSX.Element {
                 style={{ '--amll-lp-font-size': '34px', '--amll-lp-color': '#fff' } as never}
               />
             </div>
-          ) : (
+          ) : connected && net.track ? null : (
             <div className={styles.empty}>
-              {connected ? (net.track ? '这首歌没有歌词' : '在汽水音乐里播放一首歌') : '连上汽水音乐后，歌词会显示在这里'}
+              {connected ? '在汽水音乐中播放一首歌' : '连接汽水音乐后显示歌词'}
             </div>
           )}
         </div>

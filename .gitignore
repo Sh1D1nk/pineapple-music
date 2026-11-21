@@ -22,3 +22,4 @@ perf/fixtures-profile/
 perf/profile-large/
 perf/_*.json
 perf/_*.png
+perf/audit-profile/

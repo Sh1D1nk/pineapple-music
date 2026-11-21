@@ -136,7 +136,7 @@ export function SongInfoDialog(): JSX.Element | null {
                 </div>
               )}
               <div className={styles.lyricRaw} style={{ marginTop: 12 }}>
-                {lyrics?.raw?.trim() || '暂无歌词'}
+                {lyrics?.raw?.trim() || '—'}
               </div>
             </>
           )}

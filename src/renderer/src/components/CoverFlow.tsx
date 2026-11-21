@@ -169,7 +169,7 @@ export function CoverFlow({ open, onClose }: Props): JSX.Element | null {
                 }}
                 title={`${item.title} — ${item.artist}`}
               >
-                <Cover coverId={item.coverId} size={640} radius={0} alt={item.title} />
+                <Cover coverId={item.coverId} size={240} radius={0} alt={item.title} priority={Math.abs(d) < 1} />
                 <span className={styles.caption}>
                   <span className={styles.captionTitle}>{item.title}</span>
                   <span className={styles.captionArtist}>{item.artist}</span>
@@ -181,7 +181,7 @@ export function CoverFlow({ open, onClose }: Props): JSX.Element | null {
         <button type="button" className={styles.close} onClick={onClose} title="关闭 (Esc)">
           <Icon name="close" size={20} />
         </button>
-        <div className={styles.hint}>拖拽或滚轮切换封面 · 点击中间封面开始播放</div>
+        <div className={styles.hint}>滚动浏览 · 点击封面播放</div>
       </div>
     </div>
   )

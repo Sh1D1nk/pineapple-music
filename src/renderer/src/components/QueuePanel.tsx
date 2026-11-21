@@ -42,7 +42,7 @@ export function QueuePanel(): JSX.Element {
       </div>
 
       <div className={styles.queueBody}>
-        {!current && <div className={styles.queueEmpty}>待播清单是空的</div>}
+        {!current && <div className={styles.queueEmpty}>暂无待播歌曲</div>}
 
         {current && (
           <>
@@ -72,7 +72,7 @@ export function QueuePanel(): JSX.Element {
         )}
 
         <div className={styles.queueGroupTitle}>接下来</div>
-        {upcoming.length === 0 && <div className={styles.queueEmpty}>没有下一首</div>}
+        {upcoming.length === 0 && <div className={styles.queueEmpty}>队列已到末尾</div>}
         {upcoming.map((item, order) => {
           const song = songs[item.songId]
           const absolute = index + 1 + order

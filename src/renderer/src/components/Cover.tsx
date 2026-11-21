@@ -63,6 +63,7 @@ export function Cover({ coverId, size, display, radius, className, alt = '', pri
           alt={alt}
           draggable={false}
           loading={priority ? 'eager' : 'lazy'}
+          fetchPriority={priority ? 'high' : 'auto'}
           decoding="async"
           // 液态玻璃的 backdrop 会把这张图重绘进 canvas 当折射源；
           // 不声明 crossOrigin 的跨源图会污染 canvas，纹理上传直接抛 SecurityError。

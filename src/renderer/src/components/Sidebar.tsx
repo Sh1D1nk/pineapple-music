@@ -35,7 +35,7 @@ export function Sidebar(): JSX.Element {
 
   const onRandom = (): void => {
     if (songIds.length === 0) {
-      pushToast('曲库还是空的，先添加一些音乐吧')
+      pushToast('资料库为空，先添加音乐')
       return
     }
     playRandom()
@@ -166,9 +166,9 @@ export function Sidebar(): JSX.Element {
         })}
       </nav>
 
-      {/* 随机推荐：一次点击 = 随机挑一首歌播放 + 落到全屏歌词页（含下一首歌词信息）。
+      {/* 随机推荐：一次点击 = 随机播放 + 落到全屏歌词页（含下一首歌词信息）。
           它是动作不是页面，所以放在主导航之外。 */}
-      <button type="button" className={styles.randomButton} onClick={onRandom} title="随机挑一首歌播放">
+      <button type="button" className={styles.randomButton} onClick={onRandom} title="随机播放">
         <Icon name="sparkles" size={18} />
         <span>随机推荐</span>
       </button>

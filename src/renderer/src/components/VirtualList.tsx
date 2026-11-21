@@ -40,13 +40,13 @@ export function VirtualList<T>({ items, renderItem, estimate, gap = 0 }: Props<T
 
   return (
     <div ref={hostRef} className={styles.host}>
-      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+      <div style={{ height: Math.max(0, virtualizer.getTotalSize() - top), position: 'relative' }}>
         {virtualizer.getVirtualItems().map((row) => (
           <div
             key={row.key}
             data-index={row.index}
             ref={virtualizer.measureElement}
-            style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${row.start}px)` }}
+            style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${row.start - top}px)` }}
           >
             {renderItem(items[row.index]!, row.index)}
           </div>

@@ -125,7 +125,7 @@ export function TrayMenu({ dark }: { dark: boolean }): JSX.Element {
             </div>
           )}
           <div className={styles.meta}>
-            <div className={styles.menuTitle}>{state.hasTrack ? state.title : '未在播放'}</div>
+            <div className={styles.menuTitle}>{state.hasTrack ? state.title : '未播放'}</div>
             <div className={styles.menuSub}>
               {state.hasTrack ? (state.playing ? '正在播放' : '已暂停') + (state.artist ? ' · ' + state.artist : '') : '选择一首歌开始'}
             </div>

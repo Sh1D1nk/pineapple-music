@@ -330,6 +330,16 @@
   will-change: transform;
 }
 
+/* 无歌词：歌词面板收成一张「正在播放」小卡，不再是一整块黑底 + 占位文字 */
+.lyricsPanel[data-empty='true'] {
+  bottom: auto;
+  height: 104px;
+}
+
+.lyricsPanel[data-empty='true'] .lyricsBody {
+  display: none;
+}
+
 /* 无歌词：左栏滑到中间，歌词列整体滑出（纯 transform，不触发 AMLL 重排） */
 .fsNoLyric .fsLeft {
   transform: translateX(50%);
@@ -797,6 +807,17 @@ button.fsVicon:hover {
   transform: scale(0.98);
 }
 
+/* 无歌词全屏：封面可以更从容地占据画面，信息区贴着它 */
+.fsNoLyric .fsCover {
+  width: min(58vh, 42vw);
+  height: min(58vh, 42vw);
+}
+
+.fsNoLyric .fsInfo {
+  width: min(58vh, 42vw);
+  margin-top: 3.6vh;
+}
+
 /* 无歌词页右栏整体滑出时，卡片跟着收起 */
 .fsNoLyric .fsUpNext {
   opacity: 0;
@@ -847,24 +868,6 @@ button.fsVicon:hover {
   overflow: hidden;
   -webkit-mask-image: linear-gradient(to bottom, transparent 2%, #000 14%, #000 86%, transparent 98%);
   mask-image: linear-gradient(to bottom, transparent 2%, #000 14%, #000 86%, transparent 98%);
-}
-
-.fsEmpty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 1.05em;
-  color: rgba(255, 255, 255, 0.42);
-  pointer-events: none;
-}
-
-.fsEmptyHint {
-  font-size: 0.72em;
-  color: rgba(255, 255, 255, 0.28);
 }
 
 /* --------------------------------------------------------------- context menu */

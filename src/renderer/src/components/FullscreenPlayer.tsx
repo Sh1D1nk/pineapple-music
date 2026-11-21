@@ -10,6 +10,7 @@ import { useAutoMix } from '../audio/automix'
 import { formatRemaining, formatTime } from '../lib/format'
 import styles from './overlays.module.css'
 import { useOpenPaint } from '../perf/react'
+import { hasRealLyrics } from '../lib/lyrics'
 
 /**
  * 全屏正在播放。
@@ -43,7 +44,7 @@ export function FullscreenPlayer(): JSX.Element {
   const shuffle = useStore((s) => s.playback.shuffle)
   const repeat = useStore((s) => s.playback.repeat)
 
-  /* ---- 远端模式：在「网络音乐」页打开全屏歌词时，数据与控制都切到汽水 ---- */
+  /* ---- 远端模式：在「网络音乐」页全屏播放时，数据与控制都切到汽水 ---- */
   const viewKind = useStore((s) => s.view.kind)
   const net = useStore((s) => s.netMusic)
   const netConnected = useStore((s) => s.netStatus.connected)
@@ -141,7 +142,8 @@ export function FullscreenPlayer(): JSX.Element {
     return withDisplayOptions(lyricsForCurrent.lines, settings.showTranslation, settings.showRoman)
   }, [lyricsForCurrent, settings.showTranslation, settings.showRoman])
 
-  const hasLyrics = lines.length > 0
+  // 纯音乐/只有占位提示的「歌词」按无歌词处理：隐藏整个歌词列，不留占位
+  const hasLyrics = lines.length > 0 && hasRealLyrics(lines)
   const position = remote ? liveMs / 1000 : playback.position
   const duration = remote ? net.durationMs / 1000 : playback.duration || song?.durationSec || 0
   const percent = duration > 0 ? Math.min(100, (position / duration) * 100) : 0
@@ -508,7 +510,7 @@ export function FullscreenPlayer(): JSX.Element {
             <div className={styles.fsInfo}>
               <div className={styles.fsMeta}>
                 <div className={styles.fsMetaText}>
-                  <div className={`${styles.fsName} ellipsis`}>{song?.title ?? '未在播放'}</div>
+                  <div className={`${styles.fsName} ellipsis`}>{song?.title ?? '未播放'}</div>
                   <div className={`${styles.fsArtistLine} ellipsis`}>{song?.artists.join('、') ?? ''}</div>
                   {settings.showAlbum && (
                     <div className={`${styles.fsAlbumLine} ellipsis`}>{song?.album ?? ''}</div>
@@ -711,12 +713,6 @@ export function FullscreenPlayer(): JSX.Element {
               onSeek={(seconds) => seekToSec(seconds)}
               color="rgba(255,255,255,.96)"
             />
-            {!hasLyrics && (
-              <div className={styles.fsEmpty}>
-                <div>暂无歌词</div>
-                <div className={styles.fsEmptyHint}>把同名 .lrc 放在歌曲旁边即可自动加载</div>
-              </div>
-            )}
           </div>
         </div>
       )}

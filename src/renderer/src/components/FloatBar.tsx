@@ -155,7 +155,7 @@ export function FloatBar(): JSX.Element {
           ref={coverRef}
           className={styles.cover}
           onClick={openFullscreen}
-          title={title ? '打开全屏正在播放' : '未在播放'}
+          title={title ? '全屏播放' : '未播放'}
           disabled={!title && !remoteSong}
         >
           {cover ? (
@@ -165,10 +165,10 @@ export function FloatBar(): JSX.Element {
           )}
         </button>
 
-        <button type="button" className={styles.meta} onClick={openFullscreen} title="打开全屏正在播放">
-          <span className={`${styles.title} ellipsis`}>{title ?? '未在播放'}</span>
+        <button type="button" className={styles.meta} onClick={openFullscreen} title="全屏播放">
+          <span className={`${styles.title} ellipsis`}>{title ?? '未播放'}</span>
           <span className={`${styles.artist} ellipsis`}>
-            {artist || (localSong ? localSong.album : '从资料库里挑一首歌开始')}
+            {artist || (localSong ? localSong.album : '从资料库选择音乐')}
           </span>
         </button>
 

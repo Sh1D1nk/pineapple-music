@@ -213,12 +213,12 @@ export function LyricsSettingsDialog(): JSX.Element | null {
                 lyricsPriority: v === 'sidecar' ? ['sidecar', 'embedded', 'text'] : ['embedded', 'sidecar', 'text']
               })
             ),
-            bool('自动回退', '当前来源取不到歌词时自动换下一个来源', settings.lyricAutoFallback, (v) =>
+            bool('自动回退', '当前来源不可用时自动切换', settings.lyricAutoFallback, (v) =>
               void update({ lyricAutoFallback: v })
             )
           ],
           note:
-            '外挂来源支持 .lrc / .ttml / .lys / .yrc / .qrc；内嵌来源读取 SYLT / USLT / ©lyr / LYRICS；纯文本按静态列表显示。'
+            '支持 .lrc / .ttml / .lys / .yrc / .qrc 与内嵌标签。'
         }
       case 'player':
         return {
@@ -275,12 +275,12 @@ export function LyricsSettingsDialog(): JSX.Element | null {
             }, (v) => patchAutomix({ baseFadeSec: v }))
           ],
           note:
-            '插件用的是「宿主音量包络」式淡入淡出；本应用有双 deck 与分轨，因此这里是 A–E 五级过渡规划。完整的 AutoMix 参数（分轨预处理、线程、缓存）在设置页「播放 · AutoMix」。'
+            '双 Deck + 分轨：A–E 五级过渡；详细参数在设置页「播放 · AutoMix」。'
         }
       case 'misc':
         return {
           rows: [
-            sel('顶栏样式', '插件作用于宿主底边栏，这里对应本应用的顶部播放胶囊', settings.barStyle, [
+            sel('顶栏样式', '对应本应用的播放控制栏', settings.barStyle, [
               { value: 'off', label: '关闭' },
               { value: 'blur', label: '模糊' }
             ], (v) => void update({ barStyle: v as 'off' | 'blur' })),

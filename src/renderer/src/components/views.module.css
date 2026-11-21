@@ -19,10 +19,13 @@
   inset: -40px -16px -40px;
   background-size: cover;
   background-position: center;
-  /* 用 80px 缩略图放大代替 blur(28px)：观感是同一块色晕，
-     但在 iGPU 上省掉整屏面积的一次高斯模糊（实测点开专辑 -60ms）。
-     可读性仍由下面那层渐变蒙回页面底色保证。 */
-  opacity: 0.62;
+  /* 240 档缩略图 + 轻量色彩矩阵：不用整屏 blur(28px)，也不会像 80 档那样糊成方块。
+     边缘用 mask 渐隐，避免出现一块生硬的矩形。 */
+  opacity: 0.34;
+  filter: saturate(1.1) brightness(0.8);
+  /* 径向蒙版：上下左右都渐隐，不会在内容区边缘留下一条硬边 */
+  -webkit-mask-image: radial-gradient(120% 92% at 24% 0%, #000 0%, rgba(0, 0, 0, 0.55) 52%, transparent 100%);
+  mask-image: radial-gradient(120% 92% at 24% 0%, #000 0%, rgba(0, 0, 0, 0.55) 52%, transparent 100%);
   z-index: -1;
   pointer-events: none;
 }
@@ -137,12 +140,25 @@
   aspect-ratio: 1;
 }
 
+.card:hover .cardPlay,
+.card:focus-visible .cardPlay,
+.card:hover .cardMore,
+.card:focus-visible .cardMore {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
 .card:hover .cardArt {
   transform: translateY(-2px);
   transition: transform 200ms var(--ease);
 }
 
 .cardPlay {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(3px);
+  transition: opacity 160ms var(--ease), transform 160ms var(--ease), background 160ms var(--ease);
   position: absolute;
   left: 10px;
   bottom: 10px;
@@ -160,9 +176,6 @@
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.28),
     inset 0 0 0 1px rgba(255, 255, 255, 0.34);
-  /* 常驻可见：之前 opacity:0 等 hover 才亮，鼠标刚移入的那 180ms 里按钮是不存在的 */
-  opacity: 0.94;
-  transform: none;
   transition: opacity 160ms var(--ease), background 160ms var(--ease), transform 160ms var(--ease);
   z-index: 2;
 }
@@ -170,6 +183,8 @@
 .card:hover .cardPlay,
 .cardPlay:focus-visible {
   opacity: 1;
+  pointer-events: auto;
+  transform: none;
   background: rgba(18, 18, 20, 0.72);
 }
 
@@ -188,6 +203,10 @@
 }
 
 .cardMore {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(3px);
+  transition: opacity 160ms var(--ease), transform 160ms var(--ease), background 160ms var(--ease);
   position: absolute;
   right: 10px;
   bottom: 10px;
@@ -203,7 +222,6 @@
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.28),
     inset 0 0 0 1px rgba(255, 255, 255, 0.34);
-  opacity: 0.88;
   transition: opacity 160ms var(--ease), background 160ms var(--ease);
   z-index: 2;
 }
@@ -211,6 +229,8 @@
 .card:hover .cardMore,
 .cardMore:focus-visible {
   opacity: 1;
+  pointer-events: auto;
+  transform: none;
   background: rgba(18, 18, 20, 0.72);
 }
 

@@ -773,7 +773,7 @@ export const useStore = create<StoreState>((set, get) => {
       const items = ids.map((songId) => ({ key: newKey(), songId }))
       const nextQueue = [...queue.slice(0, index + 1), ...items, ...queue.slice(index + 1)]
       set({ playback: { ...state.playback, queue: nextQueue } })
-      state.pushToast(`已加入 ${ids.length} 首，接下来播放`)
+      state.pushToast(`已添加 ${ids.length} 首到接下来播放`)
       persist(get())
     },
 
@@ -781,7 +781,7 @@ export const useStore = create<StoreState>((set, get) => {
       const state = get()
       const items = ids.map((songId) => ({ key: newKey(), songId }))
       set({ playback: { ...state.playback, queue: [...state.playback.queue, ...items] } })
-      state.pushToast(`已加入 ${ids.length} 首到待播清单`)
+      state.pushToast(`已添加 ${ids.length} 首到待播清单`)
       persist(get())
     },
 
