@@ -120,6 +120,8 @@ function saveWindowState(win: BrowserWindow): void {
 function createWindow(): BrowserWindow {
   const state = loadWindowState()
   const dark = nativeTheme.shouldUseDarkColors
+  // 预览实例（独立 userData）用不同标题，避免和正式安装版两个 "Pinnet" 混淆
+  const previewTitle = process.env.PINNET_USER_DATA ? 'Pinnet 预览' : 'Pinnet'
   const win = new BrowserWindow({
     x: state.x,
     y: state.y,
@@ -136,7 +138,7 @@ function createWindow(): BrowserWindow {
       symbolColor: dark ? '#f5f5f7' : '#1d1d1f',
       height: 48
     },
-    title: 'Pinnet',
+    title: previewTitle,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -147,6 +149,13 @@ function createWindow(): BrowserWindow {
       spellcheck: false
     }
   })
+
+  if (process.env.PINNET_USER_DATA) {
+    win.on('page-title-updated', (event) => {
+      event.preventDefault()
+      win.setTitle(previewTitle)
+    })
+  }
 
   if (state.maximized) win.maximize()
 
