@@ -1,0 +1,226 @@
+/* Cover Flow：不透明纯色底 + 透视轨道 + 镜面反光。
+   所有动效只碰 transform / opacity，避免翻页时触发重排。 */
+.page {
+  position: relative;
+  height: calc(100vh - 176px);
+  min-height: 460px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px 0;
+  border-radius: 14px;
+  background: var(--bg-content);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+:global([data-nav='bottom']) .page {
+  height: calc(100vh - 288px);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--text-primary);
+}
+
+.count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 360px;
+  perspective: 600px;
+  perspective-origin: 50% 42%;
+  cursor: grab;
+  touch-action: pan-y;
+  outline: none;
+  user-select: none;
+  overflow: hidden;
+  /* 参考项目：左右各 10% 渐隐，侧封面滑出时不会硬切 */
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.2) 0%, #000 10%, #000 90%, rgba(0, 0, 0, 0.2) 100%);
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.2) 0%, #000 10%, #000 90%, rgba(0, 0, 0, 0.2) 100%);
+}
+
+.stageDragging {
+  cursor: grabbing;
+}
+
+/* 反射在舞台底边被裁断的地方，用同色渐变盖住（参考项目用的是黑色容器底边）。
+   只覆盖最底部 30px，不影响封面本身。 */
+.stage::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 30px;
+  background: linear-gradient(to bottom, transparent, var(--bg-content));
+  pointer-events: none;
+  z-index: 200;
+}
+
+.rail {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.item {
+  position: absolute;
+  left: 50%;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  transform-origin: center center;
+  will-change: transform, opacity;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.item[data-center='true'] {
+  cursor: pointer;
+}
+
+/* 镜面：封面下方做一次竖向镜像，靠渐变淡出。
+   -webkit-box-reflect 在 Chromium 里走合成器，15 张同时翻页也不会掉帧。 */
+.art {
+  display: block;
+  position: relative;
+  border-radius: 6px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.42),
+    0 2px 0 rgba(255, 255, 255, 0.08) inset;
+}
+
+/* 镜面只给正中与近邻：更远的封面本来就小、被挡住，
+   全画 9 张反射只会白白多出 9 个合成层。 */
+:global([data-theme='light']) .art {
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.22),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+.art > div {
+  width: 100%;
+  height: 100%;
+}
+
+/* 正中封面多一圈极细的高光，翻到正面时更「立」起来 */
+.artCenter {
+  box-shadow:
+    0 30px 70px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 2px 0 rgba(255, 255, 255, 0.12) inset;
+}
+
+.caption {
+  height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding-bottom: 2px;
+}
+
+.captionTitle {
+  max-width: min(70vw, 720px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--text-primary);
+  animation: captionIn 220ms var(--ease);
+}
+
+.captionArtist {
+  max-width: min(70vw, 720px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+@keyframes captionIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-height: 700px) {
+  .caption {
+    height: 48px;
+  }
+
+  .captionTitle {
+    font-size: 17px;
+  }
+}
+
+
+/* 无封面专辑：用封面色块 + 首字母，而不是灰色占位 + 音符 */
+.fallback {
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 34%;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background:
+    radial-gradient(120% 130% at 20% 0%, rgba(255, 255, 255, 0.28), transparent 55%),
+    linear-gradient(145deg, #4a4a52, #232327 62%, #17171a);
+}
+
+:global([data-theme='light']) .fallback {
+  color: rgba(0, 0, 0, 0.55);
+  background:
+    radial-gradient(120% 130% at 20% 0%, rgba(255, 255, 255, 0.9), transparent 60%),
+    linear-gradient(145deg, #d8d8de, #b9b9c1 62%, #a8a8b0);
+}
+
+
+/* 选中封面的镜面：真实 DOM 背景图翻转，比 -webkit-box-reflect 在 3D 容器里可靠。
+   mask 在元素本地坐标里会被 scaleY(-1) 一起翻，所以渐变写成「向上透明」，
+   翻转后就是向下渐隐。 */
+.reflection {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  width: 100%;
+  border-radius: 6px;
+  background-size: cover;
+  background-position: center bottom;
+  background-repeat: no-repeat;
+  transform: scaleY(-1);
+  opacity: 0.34;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.25) 55%, transparent 100%);
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.25) 55%, transparent 100%);
+}
+
+:global([data-theme='light']) .reflection {
+  opacity: 0.32;
+}

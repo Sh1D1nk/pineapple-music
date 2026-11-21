@@ -25,6 +25,7 @@ export type View =
   | { kind: 'albums' }
   | { kind: 'artists' }
   | { kind: 'favorites' }
+  | { kind: 'coverflow' }
   | { kind: 'album'; key: string }
   | { kind: 'artist'; name: string }
   | { kind: 'search' }
@@ -39,6 +40,7 @@ const VIEW_LABEL: Record<View['kind'], string> = {
   albums: '专辑',
   artists: '艺人',
   favorites: '收藏',
+  coverflow: 'Cover Flow',
   album: '专辑详情',
   artist: '艺人详情',
   search: '搜索',
@@ -119,7 +121,6 @@ interface StoreState {
   fullscreen: boolean
   /** 本次全屏页是否由「随机推荐」打开：决定「接下来播放」是否 10 秒后自动隐藏 */
   fsRandomHint: boolean
-  coverFlowOpen: boolean
   infoSongId: string | null
   settingsSection: string | null
   contextMenu: ContextMenuState | null
@@ -149,7 +150,6 @@ interface StoreState {
   setQueueOpen: (open: boolean) => void
   setLyricsOpen: (open: boolean) => void
   setFullscreen: (open: boolean) => void
-  setCoverFlowOpen: (open: boolean) => void
   setInfoSongId: (id: string | null) => void
   setContextMenu: (menu: ContextMenuState | null) => void
   setLyricsMenu: (menu: LyricsMenuState | null) => void
@@ -323,7 +323,6 @@ export const useStore = create<StoreState>((set, get) => {
     lyricsOpen: false,
     fullscreen: false,
     fsRandomHint: false,
-    coverFlowOpen: false,
     infoSongId: null,
     settingsSection: null,
     contextMenu: null,
@@ -484,9 +483,11 @@ export const useStore = create<StoreState>((set, get) => {
                 ? 3
                 : v.kind === 'favorites'
                   ? 4
-                  : v.kind === 'settings'
+                  : v.kind === 'coverflow'
                     ? 5
-                    : -1
+                    : v.kind === 'settings'
+                      ? 6
+                      : -1
       const from = order(current)
       const to = order(view)
       // 页面切换与底栏同向：往右走，新页从左进；往左走，新页从右进（KernelSU 的 HorizontalPager 同向）
@@ -535,9 +536,6 @@ export const useStore = create<StoreState>((set, get) => {
       // 全屏页在 overlayLayer（z-index 40）之上，两者同时打开只会让面板被整页盖住。
       // 开一个必关另一个，才不会出现「点了歌词按钮却什么都没发生」。
       set(open ? { lyricsOpen: true, queueOpen: false, fullscreen: false } : { lyricsOpen: false })
-    },
-    setCoverFlowOpen(open) {
-      set({ coverFlowOpen: open })
     },
 
     setFullscreen(open) {

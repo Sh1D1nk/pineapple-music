@@ -9,7 +9,7 @@ import { BottomBar } from './components/BottomBar'
 import { TopBar } from './components/TopBar'
 import { QueuePanel } from './components/QueuePanel'
 import { LyricsPanel } from './components/LyricsPanel'
-import { CoverFlow } from './components/CoverFlow'
+import { CoverFlowView } from './views/CoverFlowView'
 import { FullscreenPlayer } from './components/FullscreenPlayer'
 import { LyricsMenu } from './components/LyricsMenu'
 import { LyricsSettingsDialog } from './components/LyricsSettingsDialog'
@@ -78,8 +78,7 @@ function useShortcuts(): void {
       const state = useStore.getState()
 
       if (event.key === 'Escape') {
-        if (state.coverFlowOpen) state.setCoverFlowOpen(false)
-        else if (state.infoSongId) state.setInfoSongId(null)
+        if (state.infoSongId) state.setInfoSongId(null)
         else if (state.contextMenu) state.setContextMenu(null)
         // 歌词页内的浮层优先于整页：先收菜单，再收设置窗，最后才退出歌词页
         else if (state.lyricsMenu) state.setLyricsMenu(null)
@@ -88,6 +87,10 @@ function useShortcuts(): void {
         else if (state.queueOpen) state.setQueueOpen(false)
         else if (state.lyricsOpen) state.setLyricsOpen(false)
         // 详情页（专辑/艺人）按 Esc 也回上一层
+        else if (state.view.kind === 'coverflow') {
+          if (state.viewHistory.length > 0) state.goBack()
+          else state.setView({ kind: 'recent' })
+        }
         else if (state.view.kind === 'album' || state.view.kind === 'artist') withViewTransition(() => state.goBack())
         return
       }
@@ -112,7 +115,10 @@ function useShortcuts(): void {
         state.setVolume(Math.max(0, state.playback.volume - 0.05))
       } else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'f') {
         event.preventDefault()
-        state.setCoverFlowOpen(!state.coverFlowOpen)
+        if (state.view.kind === 'coverflow') {
+          if (state.viewHistory.length > 0) state.goBack()
+          else state.setView({ kind: 'recent' })
+        } else state.setView({ kind: 'coverflow' })
       } else if (event.ctrlKey && event.altKey && event.key.toLowerCase() === 'l') {
         // 插件原快捷键：Ctrl+Alt+L 开关歌词页（宿主可能占用了 Ctrl+L，所以两个都留）
         event.preventDefault()
@@ -194,6 +200,7 @@ function renderView(view: View): JSX.Element {
   if (view.kind === 'settings') return <SettingsView />
   if (view.kind === 'lab') return <TransitionLab />
   if (view.kind === 'glasslab') return <GlassLab />
+  if (view.kind === 'coverflow') return <CoverFlowView />
   switch (view.kind) {
     case 'songs':
       return <SongsView />
@@ -362,8 +369,6 @@ export function App(): JSX.Element {
   const navDirection = useStore((s) => s.navDirection)
   // 导航形态决定切页方向：侧边栏是上下滚，液态玻璃底栏才是左右推
   const horizontal = useStore((s) => s.settings.theme === 'liquid')
-  const coverFlowOpen = useStore((s) => s.coverFlowOpen)
-  const setCoverFlowOpen = useStore((s) => s.setCoverFlowOpen)
   const viewKey = JSON.stringify(view)
   const ready = useStore((s) => s.ready)
   const init = useStore((s) => s.init)
@@ -467,10 +472,6 @@ export function App(): JSX.Element {
           )}
           <QueuePanel />
           <LyricsPanel />
-          <CoverFlow
-            open={coverFlowOpen}
-            onClose={() => setCoverFlowOpen(false)}
-          />
         </div>
 
         {/* 预热 GPU：全屏磨砂遮罩（歌曲信息/右键菜单）首次出现时要编译 blur 着色器，

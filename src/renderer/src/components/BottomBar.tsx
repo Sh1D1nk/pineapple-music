@@ -27,7 +27,7 @@ import styles from './BottomBar.module.css'
  */
 
 const NAV: {
-  key: 'recent' | 'artists' | 'albums' | 'songs' | 'favorites' | 'settings'
+  key: 'recent' | 'artists' | 'albums' | 'songs' | 'favorites' | 'coverflow' | 'settings'
   label: string
   icon: IconName
 }[] = [
@@ -36,6 +36,7 @@ const NAV: {
   { key: 'albums', label: '专辑', icon: 'disc' },
   { key: 'songs', label: '歌曲', icon: 'music' },
   { key: 'favorites', label: '收藏', icon: 'star' },
+  { key: 'coverflow', label: 'Cover Flow', icon: 'album' },
   { key: 'settings', label: '设置', icon: 'gear' }
 ]
 

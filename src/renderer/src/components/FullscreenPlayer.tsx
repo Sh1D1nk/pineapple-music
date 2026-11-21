@@ -34,7 +34,6 @@ export function FullscreenPlayer(): JSX.Element {
   const setVolume = useStore((s) => s.setVolume)
   const toggleShuffle = useStore((s) => s.toggleShuffle)
   const cycleRepeat = useStore((s) => s.cycleRepeat)
-  const setCoverFlowOpen = useStore((s) => s.setCoverFlowOpen)
   const setQueueOpen = useStore((s) => s.setQueueOpen)
   const setLyricsMenu = useStore((s) => s.setLyricsMenu)
   const setLyricsQualityLevel = useStore((s) => s.setLyricsQualityLevel)

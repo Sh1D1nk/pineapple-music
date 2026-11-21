@@ -87,6 +87,8 @@ npm run build          # 产出 Windows 安装包 dist/Pinnet-<版本>-setup.exe
 - 液态玻璃主题的层级固定：导航胶囊在最底部，播放胶囊浮于其上（两层居中对齐），内容区预留 208px；侧边栏主题下播放条贴底。
 - 无歌词或纯音乐时不显示歌词区域与占位提示：全屏只保留封面与控制；歌词面板收成一张「正在播放」小卡。
 - 封面走主进程内存缓存与异步解码，封面流用 240 缩略图；播放启动不等待封面。
+- Cover Flow（侧栏与液态底栏入口）：固定 65° 侧封面、800ms 强缓动、当前项大留白与层叠侧封面、边缘渐隐、选中封面镜面反光；按参考项目 lucadenhez/coverflow（Matt Doyle 2011）的运动模型重写，一次输入只走一张。
+- Cover Flow（侧栏与液态底栏入口）：固定 65° 侧封面、800ms 强缓动、当前项大留白与层叠侧封面、边缘渐隐、选中封面镜面反光；按参考项目 lucadenhez/coverflow（Matt Doyle 2011）的运动模型重写，一次输入只走一张。
 - 浅色/深色跟随系统或手动切换；设计令牌集中在 `src/renderer/src/styles/tokens.css`。
 - 全屏正在播放：AMLL 流体背景、44/56 双栏、封面暂停缩放、12% 上下遮罩渐隐、点击歌词跳转。
 - 设置页：外观、资料库、歌词、AutoMix、缓存。
@@ -277,6 +279,8 @@ LICENSE                   AGPL-3.0-only 全文
 | [Apple Music Like Lyrics (AMLL)](https://github.com/amll-dev/applemusic-like-lyrics) `@applemusic-like-lyrics/react` / `lyric` / `core` | **AGPL-3.0-only** | 歌词播放器、流体背景、歌词解析。版权归 AMLL 作者（steve-xmh 等）。AGPL 与本项目兼容，但要求整体以 AGPL 分发。 |
 | [Hyalite](https://github.com/VII-Cae/hyalite--liquid-glass) v0.5.0 | **MIT** © 2026 VII-Cae (VII) | 液态玻璃折射。`src/renderer/src/vendor/hyalite/LICENSE` 为原始许可全文，`hyalite.js` 文件头保留版权声明。MIT 与 AGPL 兼容。 |
 | [Kyant0/AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) | **Apache-2.0** | 玻璃底栏的尺寸与折射配方参考（bevel/thickness/dispersion/按压弹簧），未复制代码。 |
+| [lucadenhez/coverflow](https://github.com/lucadenhez/coverflow) | **MIT** | Cover Flow 的交互与视觉参考（原始 CSS/JS 由 Matt Doyle 于 2011 年编写）；本项目按其运动模型重写（65°/800ms/当前项留白/镜面），未复制代码。 |
+| [lucadenhez/coverflow](https://github.com/lucadenhez/coverflow) | **MIT** | Cover Flow 的交互与视觉参考（原始 CSS/JS 由 Matt Doyle 于 2011 年编写）；本项目按其运动模型重写（65°/800ms/当前项留白/镜面），未复制代码。 |
 | [Signalsmith Stretch](https://www.signalsmith.com/) (npm `signalsmith-stretch`) | **MIT** | 时变变速不变调（AudioWorklet + WASM）。 |
 | [music-metadata](https://github.com/Borewit/music-metadata) | MIT | 标签读取。 |
 | [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) | MIT | 索引库（Node-API 预编译）。 |

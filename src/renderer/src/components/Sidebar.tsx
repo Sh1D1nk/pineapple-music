@@ -5,7 +5,7 @@ import { ProgressWidget } from './ProgressWidget'
 import styles from './Sidebar.module.css'
 
 const NAV: {
-  key: 'recent' | 'artists' | 'albums' | 'songs' | 'favorites' | 'netmusic'
+  key: 'recent' | 'artists' | 'albums' | 'songs' | 'favorites' | 'coverflow' | 'netmusic'
   label: string
   icon: IconName
 }[] = [
@@ -13,7 +13,8 @@ const NAV: {
   { key: 'artists', label: '艺人', icon: 'mic' },
   { key: 'albums', label: '专辑', icon: 'disc' },
   { key: 'songs', label: '歌曲', icon: 'music' },
-  { key: 'favorites', label: '收藏', icon: 'star' }
+  { key: 'favorites', label: '收藏', icon: 'star' },
+  { key: 'coverflow', label: 'Cover Flow', icon: 'album' }
 ]
 
 export function Sidebar(): JSX.Element {
