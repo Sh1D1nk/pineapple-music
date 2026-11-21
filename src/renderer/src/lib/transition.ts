@@ -2,8 +2,8 @@
  * 视图切换动画。
  *
  * 用 Chromium 的 View Transitions 做「旧界面淡出 → 新界面淡入」，并让被点中的封面
- * 通过 `view-transition-name` 从网格位置形变到详情页大图位置；弹性曲线放在
- * `::view-transition-group(album-cover)` 上，于是缩放会轻微过冲再回落（果冻感）。
+ * 通过 `view-transition-name` 从网格位置形变到详情页大图位置；曲线用无过冲的
+ * ease-out（`cubic-bezier(.22,1,.36,1)`），不要 Q 弹。
  * 不支持或被系统要求减少动效时，直接执行回调，不做任何降级延迟。
  */
 const REDUCED = (): boolean =>

@@ -17,7 +17,7 @@ import { hasRealLyrics } from '../lib/lyrics'
  *
  * 版式对齐参考实现（汽水 AMLL 插件的歌词页）：
  *   sa-stage = flex，左栏 50%（关闭条 / 封面 / 曲名 / 进度 / 控制 / 音量），右栏 50%（AMLL 歌词）。
- *   封面 min(52vh,37vw)、圆角 3%、暂停 scale(.84) / 播放 scale(1.03)，弹性曲线 (.34,1.56,.64,1)。
+ *   封面 min(52vh,37vw)、圆角 3%、暂停 scale(.84) / 播放 scale(1.03)，平滑曲线 (.22,1,.36,1)。
  *   歌词字号 max(max(5vh,2.5vw),12px) × 用户倍数，上下用 mask 渐隐而不是压一层黑色遮罩。
  */
 export function FullscreenPlayer(): JSX.Element {

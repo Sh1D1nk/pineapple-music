@@ -3,6 +3,7 @@ import { useStore } from '../state/store'
 import { Cover } from '../components/Cover'
 import { albumKeyOf } from '../lib/group'
 import { coverUrl } from '../bridge'
+import { markMorph, setMorphAlbum, withViewTransition } from '../lib/transition'
 import styles from './CoverFlowView.module.css'
 
 interface FlowItem {
@@ -31,7 +32,7 @@ const clamp = (value: number, min: number, max: number): number => Math.max(min,
  */
 export function CoverFlowView(): JSX.Element {
   const songs = useStore((s) => s.songs)
-  const playSongs = useStore((s) => s.playSongs)
+  const setView = useStore((s) => s.setView)
 
   const items = useMemo<FlowItem[]>(() => {
     const map = new Map<string, FlowItem>()
@@ -119,13 +120,20 @@ export function CoverFlowView(): JSX.Element {
     setIndex((value) => clamp(value + delta, 0, maxIndex))
   }
 
-  const goTo = (target: number): void => {
-    if (target === index) {
-      const item = items[target]
-      if (item) playSongs(item.songIds, 0)
-      return
-    }
-    setIndex(clamp(target, 0, maxIndex))
+  /** 正中封面：进入专辑详情（曲目列表），封面通过 View Transition 形变保留到详情大图。 */
+  const openAlbum = (item: FlowItem): void => {
+    const art = stageRef.current?.querySelector('[data-center="true"] [data-cf-art]')
+    markMorph(art)
+    setMorphAlbum(item.key)
+    withViewTransition(() => setView({ kind: 'album', key: item.key }))
+  }
+
+  /** 侧边封面：先把它转到正中；再点正中才进入详情（避免从旋转态直接形变）。 */
+  const choose = (target: number): void => {
+    const item = items[target]
+    if (!item) return
+    if (target === index) openAlbum(item)
+    else setIndex(clamp(target, 0, maxIndex))
   }
 
   // 滚轮：一次事件一张（参考项目同一模型），75ms 内合并同一次触控板惯性
@@ -184,7 +192,7 @@ export function CoverFlowView(): JSX.Element {
       go(-1)
     } else if (event.key === 'Enter' && items[index]) {
       event.preventDefault()
-      playSongs(items[index]!.songIds, 0)
+      openAlbum(items[index]!)
     }
   }
 
@@ -233,7 +241,7 @@ export function CoverFlowView(): JSX.Element {
                 data-center={center ? 'true' : 'false'}
                 data-cf-index={i}
                 style={{
-                  top: `calc(50% - ${Math.round(size * 0.26)}px)`,
+                  top: `calc(50% - ${Math.round(size * 0.04)}px)`,
                   transform: `translate(-50%, -50%) translateX(${x}px) translateZ(${z}px) rotateY(${angle}deg)`,
                   transition: TRANSITION,
                   zIndex: center ? 100 : -100,
@@ -241,12 +249,12 @@ export function CoverFlowView(): JSX.Element {
                 }}
                 onClick={() => {
                   if (swipedRef.current) return
-                  goTo(i)
+                  choose(i)
                 }}
                 title={`${item.title} — ${item.artist}`}
               >
                 <span
-                  className={`${styles.art} ${center ? styles.artCenter : ''} `}
+                  className={`${styles.art} ${center ? styles.artCenter : ''}`}
                   style={{ width: size, height: size }}
                   data-cf-art="1"
                 >

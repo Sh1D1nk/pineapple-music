@@ -19,10 +19,11 @@
   inset: -40px -16px -40px;
   background-size: cover;
   background-position: center;
-  /* 240 档缩略图 + 轻量色彩矩阵：不用整屏 blur(28px)，也不会像 80 档那样糊成方块。
-     边缘用 mask 渐隐，避免出现一块生硬的矩形。 */
-  opacity: 0.34;
-  filter: saturate(1.1) brightness(0.8);
+  /* 80 档底图 + 高斯模糊：只留色晕，避免封面上巨大的字被放大后铺满页面。
+     边缘用径向蒙版渐隐，不会出现生硬矩形。 */
+  opacity: 0.4;
+  filter: blur(22px) saturate(1.05) brightness(0.78);
+  transform: scale(1.04);
   /* 径向蒙版：上下左右都渐隐，不会在内容区边缘留下一条硬边 */
   -webkit-mask-image: radial-gradient(120% 92% at 24% 0%, #000 0%, rgba(0, 0, 0, 0.55) 52%, transparent 100%);
   mask-image: radial-gradient(120% 92% at 24% 0%, #000 0%, rgba(0, 0, 0, 0.55) 52%, transparent 100%);

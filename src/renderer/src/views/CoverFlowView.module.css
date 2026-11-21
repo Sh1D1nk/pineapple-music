@@ -43,7 +43,7 @@
   flex: 1;
   min-height: 360px;
   perspective: 600px;
-  perspective-origin: 50% 42%;
+  perspective-origin: 50% 50%;
   cursor: grab;
   touch-action: pan-y;
   outline: none;
@@ -127,13 +127,15 @@
 }
 
 .caption {
-  height: 62px;
+  height: 54px;
+  margin-bottom: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
   padding-bottom: 2px;
+  /* 专辑名往上收一点，别贴着窗口最底边 */
 }
 
 .captionTitle {
@@ -141,7 +143,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.2px;
   color: var(--text-primary);

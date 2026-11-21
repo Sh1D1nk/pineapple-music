@@ -338,10 +338,11 @@ html[data-fx='cheap'] .glass {
   animation: vtFadeIn 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
-/* 被点中的封面：从网格里的小图长到详情页大图，弹性曲线让它略微过冲再回落。 */
+/* 被点中的封面：从网格/封面流的小图长到详情页大图。
+   用无过冲的平滑曲线（不用 1.56 那种 Q 弹），观感更克制。 */
 ::view-transition-group(album-cover) {
-  animation-duration: 560ms;
-  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation-duration: 520ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 ::view-transition-old(album-cover) {
@@ -349,7 +350,7 @@ html[data-fx='cheap'] .glass {
 }
 
 ::view-transition-new(album-cover) {
-  animation: vtCoverIn 560ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: vtCoverIn 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes vtFadeOut {
@@ -371,12 +372,10 @@ html[data-fx='cheap'] .glass {
 
 @keyframes vtCoverIn {
   from {
-    opacity: 0.35;
-    transform: scale(0.86);
+    opacity: 0.55;
   }
   to {
     opacity: 1;
-    transform: scale(1);
   }
 }
 
